@@ -1,0 +1,284 @@
+const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:5000' : 'https://your-app-name.onrender.com';
+
+let currentUserId = null;
+let reminderInterval = null;
+
+// DOM Elements
+const userSection = document.getElementById('user-section');
+const userInfo = document.getElementById('user-info');
+const userName = document.getElementById('user-name');
+const medicineSection = document.getElementById('medicine-section');
+const scheduleSection = document.getElementById('schedule-section');
+const historySection = document.getElementById('history-section');
+const reminderSection = document.getElementById('reminder-section');
+
+// Event Listeners
+document.getElementById('user-form').addEventListener('submit', handleUserSubmit);
+document.getElementById('medicine-form').addEventListener('submit', handleMedicineSubmit);
+document.getElementById('view-schedule-btn').addEventListener('click', viewSchedule);
+document.getElementById('view-history-btn').addEventListener('click', viewHistory);
+document.getElementById('start-reminder-btn').addEventListener('click', startReminderCheck);
+document.getElementById('stop-reminder-btn').addEventListener('click', stopReminderCheck);
+document.getElementById('notification-btn').addEventListener('click', requestNotificationPermission);
+
+async function handleUserSubmit(e) {
+    e.preventDefault();
+    
+    const name = document.getElementById('name').value;
+    const email = document.getElementById('email').value;
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/user`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ name, email })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            currentUserId = data.user_id;
+            userName.textContent = data.name;
+            userInfo.classList.remove('hidden');
+            medicineSection.classList.remove('hidden');
+            scheduleSection.classList.remove('hidden');
+            historySection.classList.remove('hidden');
+            reminderSection.classList.remove('hidden');
+            showNotification('Login successful!');
+        } else {
+            showNotification(data.error || 'Error creating user');
+        }
+    } catch (error) {
+        showNotification('Error connecting to server');
+    }
+}
+
+async function handleMedicineSubmit(e) {
+    e.preventDefault();
+    
+    const medicineName = document.getElementById('medicine-name').value;
+    const dosage = document.getElementById('dosage').value;
+    const instructions = document.getElementById('instructions').value;
+    const medicineTime = document.getElementById('medicine-time').value;
+    
+    // Convert time to 12-hour format
+    const time = formatTimeTo12Hour(medicineTime);
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/medicine`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                user_id: currentUserId,
+                medicine_name: medicineName,
+                dosage: dosage,
+                instructions: instructions,
+                start_time: time
+            })
+        });
+        
+        if (response.ok) {
+            showNotification('Medicine added successfully!');
+            document.getElementById('medicine-form').reset();
+        } else {
+            showNotification('Error adding medicine');
+        }
+    } catch (error) {
+        showNotification('Error connecting to server');
+    }
+}
+
+async function viewSchedule() {
+    try {
+        const response = await fetch(`${API_BASE}/api/schedule`);
+        const schedules = await response.json();
+        
+        const scheduleList = document.getElementById('schedule-list');
+        scheduleList.innerHTML = '';
+        
+        if (schedules.length === 0) {
+            scheduleList.innerHTML = '<p>No schedules found.</p>';
+            return;
+        }
+        
+        schedules.forEach(schedule => {
+            const card = document.createElement('div');
+            card.className = 'medicine-card';
+            card.innerHTML = `
+                <h3>${schedule.medicine_name}</h3>
+                <p><strong>Dosage:</strong> ${schedule.dosage}</p>
+                <p><strong>Instructions:</strong> ${schedule.instructions}</p>
+                <p><strong>Time:</strong> ${schedule.start_time}</p>
+                <p><strong>Status:</strong> <span class="status-${schedule.status.toLowerCase()}">${schedule.status}</span></p>
+            `;
+            scheduleList.appendChild(card);
+        });
+    } catch (error) {
+        showNotification('Error fetching schedule');
+    }
+}
+
+async function viewHistory() {
+    try {
+        const response = await fetch(`${API_BASE}/api/history/${currentUserId}`);
+        const history = await response.json();
+        
+        const historyList = document.getElementById('history-list');
+        historyList.innerHTML = '';
+        
+        if (history.length === 0) {
+            historyList.innerHTML = '<p>No history found.</p>';
+            return;
+        }
+        
+        history.forEach(medicine => {
+            const card = document.createElement('div');
+            card.className = 'medicine-card';
+            card.innerHTML = `
+                <h3>${medicine.medicine_name}</h3>
+                <p><strong>Dosage:</strong> ${medicine.dosage}</p>
+                <p><strong>Instructions:</strong> ${medicine.instructions}</p>
+                <p><strong>Time Taken:</strong> ${medicine.start_time}</p>
+            `;
+            historyList.appendChild(card);
+        });
+    } catch (error) {
+        showNotification('Error fetching history');
+    }
+}
+
+function startReminderCheck() {
+    document.getElementById('start-reminder-btn').classList.add('hidden');
+    document.getElementById('stop-reminder-btn').classList.remove('hidden');
+    
+    reminderInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`${API_BASE}/api/reminder/check`);
+            const reminders = await response.json();
+            
+            reminders.forEach(reminder => {
+                showMedicineReminder(reminder);
+            });
+        } catch (error) {
+            console.error('Error checking reminders:', error);
+        }
+    }, 30000); // Check every 30 seconds
+}
+
+function stopReminderCheck() {
+    document.getElementById('start-reminder-btn').classList.remove('hidden');
+    document.getElementById('stop-reminder-btn').classList.add('hidden');
+    
+    if (reminderInterval) {
+        clearInterval(reminderInterval);
+        reminderInterval = null;
+    }
+}
+
+function showMedicineReminder(reminder) {
+    // Show browser notification
+    if (Notification.permission === 'granted') {
+        new Notification('💊 Medicine Reminder', {
+            body: `Time to take ${reminder.medicine_name} (${reminder.dosage})`,
+            icon: '/icon.png',
+            requireInteraction: true
+        });
+    }
+    
+    // Show in-app notification
+    const reminderStatus = document.getElementById('reminder-status');
+    reminderStatus.innerHTML = `
+        <h3>Reminder!</h3>
+        <p>Time to take: ${reminder.medicine_name}</p>
+        <p>Dosage: ${reminder.dosage}</p>
+        <p>Instructions: ${reminder.instructions}</p>
+        <button onclick="markAsTaken(${reminder.medicine_id})">Mark as Taken</button>
+    `;
+    
+    // Play ringtone if available
+    playRingtone();
+}
+
+async function markAsTaken(medicineId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/medicine/${medicineId}/taken`, {
+            method: 'PUT'
+        });
+        
+        if (response.ok) {
+            document.getElementById('reminder-status').innerHTML = '<p>Medicine marked as taken!</p>';
+            showNotification('Medicine status updated!');
+        }
+    } catch (error) {
+        showNotification('Error updating medicine status');
+    }
+}
+
+function playRingtone() {
+    // Create audio context for ringtone
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+    
+    oscillator.start();
+    
+    // Stop after 2 seconds
+    setTimeout(() => {
+        oscillator.stop();
+    }, 2000);
+}
+
+function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        showNotification('This browser does not support notifications');
+        return;
+    }
+    
+    Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+            showNotification('Notifications enabled! You will receive medicine reminders.');
+            
+            // Test ringtone
+            playRingtone();
+        } else {
+            showNotification('Notifications are disabled. Please enable them for reminders.');
+        }
+    });
+}
+
+function formatTimeTo12Hour(time24) {
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+}
+
+function showNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'notification';
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
+// Initialize
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+        .then(registration => console.log('SW registered'))
+        .catch(error => console.log('SW registration failed'));
+}
