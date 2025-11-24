@@ -1,26 +1,38 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import datetime
 import json
-import psycopg2
+import psycopg
 from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app)
 
 # Database connection
 def get_db_connection():
-    conn = psycopg2.connect(
-        host=os.getenv('DB_HOST'),
-        database=os.getenv('DB_NAME'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        port=os.getenv('DB_PORT')
-    )
+    database_url = os.getenv('DATABASE_URL')
+    
+    if database_url:
+        # Parse the database URL for Render
+        if database_url.startswith('postgres://'):
+            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        
+        conn = psycopg.connect(database_url)
+    else:
+        # Fallback to individual environment variables (for local development)
+        conn = psycopg.connect(
+            host=os.getenv('DB_HOST'),
+            dbname=os.getenv('DB_NAME'),
+            user=os.getenv('DB_USER'),
+            password=os.getenv('DB_PASSWORD'),
+            port=os.getenv('DB_PORT')
+        )
     return conn
+
+# The rest of your app.py code remains the same...
 
 # Initialize database tables
 def init_db():
@@ -244,3 +256,4 @@ if __name__ == '__main__':
     init_db()
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+
