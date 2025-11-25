@@ -26,8 +26,9 @@
             <div class="auth-container">
                 <div class="auth-card">
                     <div class="auth-header">
-                        <img src="{{ url_for('static', filename='medicine-logo.png') }}" 
-                             alt="Medicine Reminder Logo" class="app-logo">
+                        <div class="app-logo">
+                            <i class="fas fa-pills"></i>
+                        </div>
                         <h1>Medicine Reminder</h1>
                         <p>Track your medications and never miss a dose</p>
                     </div>
@@ -278,8 +279,9 @@
         </div>
     </div>
 
+    <!-- Snackbar for notifications -->
+    <div id="snackbar" class="snackbar hidden"></div>
+
     <script src="{{ url_for('static', filename='script.js') }}"></script>
-    
-    
 </body>
 </html>
