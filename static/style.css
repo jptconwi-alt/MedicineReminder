@@ -849,3 +849,351 @@ body {
     box-sizing: border-box;
 }
 
+@keyframes slideUp {
+    from { 
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Medicine Times Display */
+.medicine-times {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-xs);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    background: var(--background-color);
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--primary-color);
+}
+
+.medicine-times i {
+    color: var(--primary-color);
+}
+
+/* Notification Bell Styles */
+.notification-bell {
+    position: relative;
+    background: none;
+    border: none;
+    font-size: var(--text-lg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    transition: all 0.3s ease;
+}
+
+.notification-bell:hover {
+    background: var(--background-color);
+    color: var(--primary-color);
+    transform: scale(1.1);
+}
+
+.notification-bell:active {
+    transform: scale(0.95);
+}
+
+.notification-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--danger-color);
+    color: white;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    font-size: var(--text-xs);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    border: 2px solid white;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
+
+/* Notification Cards */
+.notification-card {
+    background: var(--surface-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-sm);
+    border-left: 4px solid var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+.notification-card.unread {
+    background: #f0f9ff;
+    border-left-color: var(--primary-color);
+    animation: highlight 2s ease;
+}
+
+.notification-card.read {
+    background: var(--surface-color);
+    border-left-color: var(--border-color);
+    opacity: 0.7;
+}
+
+@keyframes highlight {
+    0% {
+        background: #fffbeb;
+        border-left-color: var(--warning-color);
+    }
+    50% {
+        background: #f0f9ff;
+        border-left-color: var(--primary-color);
+    }
+    100% {
+        background: #f0f9ff;
+        border-left-color: var(--primary-color);
+    }
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-xs);
+}
+
+.notification-message {
+    font-weight: 500;
+    color: var(--text-primary);
+    flex: 1;
+    line-height: 1.4;
+}
+
+.notification-time {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-left: var(--space-md);
+    white-space: nowrap;
+}
+
+.notification-medicine {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-sm);
+}
+
+.notification-actions {
+    margin-top: var(--space-sm);
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: var(--text-xs);
+    width: auto;
+    border-radius: var(--radius-sm);
+}
+
+/* Responsive Design for Alarm Modal */
+@media (max-width: 480px) {
+    .alarm-content {
+        padding: var(--space-lg);
+        margin: var(--space-md);
+    }
+    
+    .alarm-actions {
+        flex-direction: column;
+    }
+    
+    .alarm-actions .btn {
+        width: 100%;
+    }
+    
+    .notification-header {
+        flex-direction: column;
+        gap: var(--space-xs);
+    }
+    
+    .notification-time {
+        margin-left: 0;
+        align-self: flex-start;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .alarm-content {
+        background: #1e293b;
+        color: white;
+    }
+    
+    .alarm-header h3 {
+        color: white;
+    }
+    
+    .alarm-message {
+        color: #e2e8f0;
+    }
+    
+    .notification-card.unread {
+        background: #1e3a8a;
+    }
+}
+
+/* Accessibility improvements */
+.alarm-modal:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+.btn:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Loading states */
+.btn.loading {
+    position: relative;
+    color: transparent;
+}
+
+.btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin: -8px 0 0 -8px;
+    border: 2px solid transparent;
+    border-top: 2px solid currentColor;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Print styles */
+@media print {
+    .alarm-modal,
+    .notification-bell,
+    .notification-badge {
+        display: none !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .alarm-content {
+        border: 2px solid currentColor;
+    }
+    
+    .notification-card {
+        border: 1px solid currentColor;
+    }
+    
+    .notification-badge {
+        border: 2px solid currentColor;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .alarm-modal,
+    .notification-card,
+    .notification-bell {
+        animation: none;
+        transition: none;
+    }
+    
+    .notification-badge {
+        animation: none;
+    }
+}
+
+/* Specific medicine card enhancements for better notification context */
+.medicine-card {
+    transition: all 0.3s ease;
+}
+
+.medicine-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.medicine-card.urgent {
+    border: 2px solid var(--danger-color);
+    animation: urgent-pulse 3s infinite;
+}
+
+@keyframes urgent-pulse {
+    0%, 100% {
+        border-color: var(--danger-color);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    50% {
+        border-color: #fca5a5;
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+}
+
+/* Time-based status indicators */
+.medicine-card.upcoming {
+    border-left: 4px solid var(--warning-color);
+}
+
+.medicine-card.due {
+    border-left: 4px solid var(--danger-color);
+}
+
+.medicine-card.taken {
+    border-left: 4px solid var(--success-color);
+    opacity: 0.7;
+}
+
+/* Custom scrollbar for notifications */
+.notifications-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.notifications-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notifications-container::-webkit-scrollbar-track {
+    background: var(--background-color);
+    border-radius: 3px;
+}
+
+.notifications-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.notifications-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+}
