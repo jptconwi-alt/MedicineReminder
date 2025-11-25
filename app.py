@@ -19,7 +19,7 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-2024')
 CORS(app)
 
 # Database configuration
-DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://medicine_user:password@localhost/medicinereminder')
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://medicine_reminder_db_ydwd_user:MA8YcIJ9c23KnnMaArYbFSfRfA5qYwpd@dpg-d4i9106r433s73c98mv0-a/medicine_reminder_db_ydwd')
 
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -465,4 +465,5 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
