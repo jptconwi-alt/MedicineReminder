@@ -137,6 +137,38 @@
                     </div>
                 </div>
 
+                <!-- Add to user dashboard, after the stats card -->
+<div class="card">
+    <h3>Notifications</h3>
+    <div id="notifications-list" class="notifications-list">
+        <!-- Notifications will be loaded here -->
+    </div>
+</div>
+
+<!-- Add notification bell to header -->
+<div class="header-actions">
+    <button class="notification-bell" id="notification-bell">
+        <i class="fas fa-bell"></i>
+    </button>
+    <div class="dropdown-container">
+        <button class="btn btn-outline dropdown-btn" onclick="toggleDropdown()">
+            <i class="fas fa-ellipsis-v"></i>
+            Menu
+            <i class="fas fa-chevron-down dropdown-arrow"></i>
+        </button>
+        <div id="user-dropdown" class="dropdown-menu hidden">
+            <button class="dropdown-item" onclick="showMedicineHistory()">
+                <i class="fas fa-history"></i>
+                Medicine History
+            </button>
+            <button class="dropdown-item" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i>
+                Logout
+            </button>
+        </div>
+    </div>
+</div>
+                
                 <div class="stats-card">
                     <div class="stat-item">
                         <i class="fas fa-pills" style="color: #2563eb;"></i>
@@ -276,3 +308,4 @@
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+
