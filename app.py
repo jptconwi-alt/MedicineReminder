@@ -135,46 +135,83 @@ with app.app_context():
 scheduler = BackgroundScheduler()
 
 def check_medicine_reminders():
-    """Check for due medicines and send notifications"""
+    """Check for due medicines and send notifications based on specific times"""
     with app.app_context():
         try:
             current_time = datetime.utcnow()
-            current_hour = current_time.hour
+            current_time_str = current_time.strftime('%H:%M')
+            
+            print(f"🔔 Checking reminders at {current_time_str}")
             
             # Get all active medicines
             active_medicines = Medicine.query.filter_by(status='Active').all()
             
             for medicine in active_medicines:
-                # Check if it's time for reminder (9 AM example)
-                if current_hour == 9:  # 9 AM
-                    # Create notification for user
-                    notification = Notification(
-                        user_id=medicine.user_id,
-                        medicine_id=medicine.id,
-                        message=f'Time to take {medicine.medicine_name} - {medicine.dosage}',
-                        type='reminder'
-                    )
-                    db.session.add(notification)
+                # Parse specific times if available
+                specific_times = []
+                if medicine.specific_times:
+                    try:
+                        specific_times = json.loads(medicine.specific_times)
+                    except:
+                        specific_times = []
+                
+                # If no specific times, use default times based on times_per_day
+                if not specific_times and medicine.times_per_day:
+                    specific_times = generate_default_times(medicine.times_per_day)
+                
+                # Check if current time matches any scheduled time
+                for scheduled_time in specific_times:
+                    if is_time_matching(current_time_str, scheduled_time):
+                        # Check if we already notified for this medicine at this time today
+                        today = current_time.date()
+                        existing_notification = Notification.query.filter(
+                            Notification.user_id == medicine.user_id,
+                            Notification.medicine_id == medicine.id,
+                            db.func.date(Notification.created_at) == today,
+                            Notification.message.like(f'%{scheduled_time}%')
+                        ).first()
+                        
+                        if not existing_notification:
+                            # Create notification
+                            notification = Notification(
+                                user_id=medicine.user_id,
+                                medicine_id=medicine.id,
+                                message=f'Time to take {medicine.medicine_name} - {medicine.dosage} at {scheduled_time}',
+                                type='reminder'
+                            )
+                            db.session.add(notification)
+                            print(f"✅ Created reminder for {medicine.medicine_name} at {scheduled_time}")
             
             db.session.commit()
-            print(f"✅ Checked reminders at {current_time}")
             
         except Exception as e:
             print(f"❌ Error checking reminders: {e}")
 
-# Start the scheduler
-try:
-    scheduler.add_job(
-        func=check_medicine_reminders,
-        trigger='cron',
-        hour='*',  # Run every hour
-        minute=0   # Run at the start of each hour
-    )
-    scheduler.start()
-    print("✅ Medicine reminder scheduler started")
-except Exception as e:
-    print(f"❌ Failed to start scheduler: {e}")
+def generate_default_times(times_per_day):
+    """Generate default times based on number of times per day"""
+    if times_per_day == 1:
+        return ["09:00"]
+    elif times_per_day == 2:
+        return ["08:00", "20:00"]
+    elif times_per_day == 3:
+        return ["08:00", "14:00", "20:00"]
+    elif times_per_day == 4:
+        return ["08:00", "12:00", "16:00", "20:00"]
+    else:
+        return ["09:00"]  # Default fallback
 
+def is_time_matching(current_time, scheduled_time):
+    """Check if current time matches scheduled time (with 1-minute window)"""
+    try:
+        # Allow 1-minute window for matching
+        current_dt = datetime.strptime(current_time, '%H:%M')
+        scheduled_dt = datetime.strptime(scheduled_time, '%H:%M')
+        
+        time_diff = abs((current_dt - scheduled_dt).total_seconds())
+        return time_diff <= 60  # 1 minute window
+        
+    except ValueError:
+        return False
 # New API routes for notifications
 @app.route('/api/user_notifications')
 def get_user_notifications():
@@ -570,6 +607,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
