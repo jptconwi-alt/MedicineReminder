@@ -8,6 +8,10 @@ import os
 import re
 from flask_cors import CORS
 import io
+import threading
+import time
+from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, time as dt_time
 
 # Initialize Flask
 app = Flask(__name__, 
@@ -127,6 +131,107 @@ with app.app_context():
             time.sleep(2)
 
 # Routes
+
+scheduler = BackgroundScheduler()
+
+def check_medicine_reminders():
+    """Check for due medicines and send notifications"""
+    with app.app_context():
+        try:
+            current_time = datetime.utcnow()
+            current_hour = current_time.hour
+            
+            # Get all active medicines
+            active_medicines = Medicine.query.filter_by(status='Active').all()
+            
+            for medicine in active_medicines:
+                # Check if it's time for reminder (9 AM example)
+                if current_hour == 9:  # 9 AM
+                    # Create notification for user
+                    notification = Notification(
+                        user_id=medicine.user_id,
+                        medicine_id=medicine.id,
+                        message=f'Time to take {medicine.medicine_name} - {medicine.dosage}',
+                        type='reminder'
+                    )
+                    db.session.add(notification)
+            
+            db.session.commit()
+            print(f"✅ Checked reminders at {current_time}")
+            
+        except Exception as e:
+            print(f"❌ Error checking reminders: {e}")
+
+# Start the scheduler
+try:
+    scheduler.add_job(
+        func=check_medicine_reminders,
+        trigger='cron',
+        hour='*',  # Run every hour
+        minute=0   # Run at the start of each hour
+    )
+    scheduler.start()
+    print("✅ Medicine reminder scheduler started")
+except Exception as e:
+    print(f"❌ Failed to start scheduler: {e}")
+
+# New API routes for notifications
+@app.route('/api/user_notifications')
+def get_user_notifications():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    notifications = Notification.query.filter_by(
+        user_id=session['user_id']
+    ).order_by(Notification.created_at.desc()).limit(20).all()
+    
+    notifications_data = []
+    for notification in notifications:
+        medicine = Medicine.query.get(notification.medicine_id) if notification.medicine_id else None
+        notification_data = {
+            'id': notification.id,
+            'message': notification.message,
+            'type': notification.type,
+            'is_read': notification.is_read,
+            'created_at': notification.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'medicine_name': medicine.medicine_name if medicine else None
+        }
+        notifications_data.append(notification_data)
+    
+    return jsonify({'success': True, 'notifications': notifications_data})
+
+@app.route('/api/mark_notification_read/<int:notification_id>', methods=['POST'])
+def mark_notification_read(notification_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    try:
+        notification = Notification.query.get(notification_id)
+        if notification and notification.user_id == session['user_id']:
+            notification.is_read = True
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Notification marked as read'})
+        else:
+            return jsonify({'success': False, 'message': 'Notification not found'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error updating notification'})
+
+@app.route('/api/set_reminder_time', methods=['POST'])
+def set_reminder_time():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    try:
+        data = request.get_json()
+        reminder_time = data.get('reminder_time', '09:00')  # Default to 9 AM
+        
+        # Store user's preferred reminder time (you might want to add this to User model)
+        # For now, we'll use session
+        session['reminder_time'] = reminder_time
+        
+        return jsonify({'success': True, 'message': f'Reminder time set to {reminder_time}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error setting reminder time'})
 
 @app.route('/api/add_medicine', methods=['POST'])
 def add_medicine():
@@ -465,5 +570,6 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
