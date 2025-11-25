@@ -277,6 +277,14 @@ def add_medicine():
     
     try:
         data = request.get_json()
+        
+        # Handle specific times
+        specific_times = data.get('specific_times')
+        if specific_times and isinstance(specific_times, list):
+            specific_times = json.dumps(specific_times)
+        else:
+            specific_times = None
+        
         medicine = Medicine(
             user_id=session['user_id'],
             medicine_name=data.get('medicine_name'),
@@ -284,7 +292,7 @@ def add_medicine():
             frequency=data.get('frequency', 'daily'),
             schedule_type=data.get('schedule_type', 'fixed'),
             times_per_day=data.get('times_per_day', 1),
-            specific_times=data.get('specific_times'),
+            specific_times=specific_times,
             start_date=data.get('start_date'),
             end_date=data.get('end_date'),
             instructions=data.get('instructions'),
@@ -607,6 +615,7 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
 
 
