@@ -1,11 +1,9 @@
 // Global variables
 let currentUser = null;
-
-// Add to global variables
 let notificationSound = null;
 let reminderInterval = null;
 
-// Add to DOMContentLoaded event listener
+// Initialize app
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Medicine Reminder App Initialized');
     
@@ -71,12 +69,12 @@ function playNotificationSound() {
 
 // Start checking for reminders
 function startReminderChecking() {
-    // Check every minute for due reminders
+    // Check every 30 seconds for due reminders
     reminderInterval = setInterval(async () => {
         if (currentUser) {
             await checkDueReminders();
         }
-    }, 60000); // Check every minute
+    }, 30000); // Check every 30 seconds
     
     // Also check immediately
     if (currentUser) {
@@ -87,93 +85,187 @@ function startReminderChecking() {
 // Check for due reminders
 async function checkDueReminders() {
     try {
-        const response = await fetch('/api/upcoming_reminders');
+        const response = await fetch('/api/user_notifications');
         const data = await response.json();
         
-        if (data.success && data.reminders.length > 0) {
-            const currentTime = new Date();
-            const currentHour = currentTime.getHours();
-            const currentMinute = currentTime.getMinutes();
+        if (data.success) {
+            const unreadNotifications = data.notifications.filter(n => !n.is_read && n.type === 'reminder');
             
-            // Check if it's reminder time (9 AM by default)
-            if (currentHour === 9 && currentMinute === 0) {
-                showMedicineReminder(data.reminders);
+            // Check for new notifications to show as alarms
+            for (const notification of unreadNotifications) {
+                if (!sessionStorage.getItem(`alarm_shown_${notification.id}`)) {
+                    showMedicineAlarm(notification);
+                    sessionStorage.setItem(`alarm_shown_${notification.id}`, 'true');
+                    
+                    // Mark as read after showing
+                    await markNotificationAsRead(notification.id);
+                }
             }
             
-            // Also check for unread notifications
-            await checkUnreadNotifications();
+            updateNotificationBadge(unreadNotifications.length);
         }
     } catch (error) {
         console.error('Error checking reminders:', error);
     }
 }
 
-// Show medicine reminder notification
-function showMedicineReminder(reminders) {
-    if (reminders.length === 0) return;
+// Enhanced alarm function
+function showMedicineAlarm(notification) {
+    console.log('🔔 Showing alarm for:', notification.message);
     
-    // Play sound
-    playNotificationSound();
+    // Play alarm sound
+    playAlarmSound();
     
-    // Show browser notification if supported
+    // Show browser notification
     if ('Notification' in window && Notification.permission === 'granted') {
-        const medicineNames = reminders.map(r => r.medicine_name).join(', ');
-        new Notification('Medicine Reminder', {
-            body: `Time to take your medicines: ${medicineNames}`,
-            icon: '/static/icon-192.png',
-            tag: 'medicine-reminder'
-        });
+        try {
+            new Notification('💊 Medicine Reminder', {
+                body: notification.message,
+                icon: '/static/icon-192.png',
+                tag: 'medicine-alarm',
+                requireInteraction: true
+            });
+        } catch (error) {
+            console.warn('Browser notification failed:', error);
+        }
     }
     
-    // Show in-app notification
-    showSnackbar(`💊 Time to take your medicines!`, 'warning');
-    
-    // Update reminders list
-    loadUpcomingReminders();
+    // Show in-app alarm modal
+    showAlarmModal(notification);
 }
 
-// Check for unread notifications
-async function checkUnreadNotifications() {
+// Enhanced alarm sound
+function playAlarmSound() {
+    if (!notificationSound) return;
+    
+    try {
+        if (notificationSound === 'fallback') {
+            // More noticeable fallback sound
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => console.log('\x07'), i * 500);
+            }
+        } else {
+            // More urgent alarm sound
+            const oscillator = notificationSound.createOscillator();
+            const gainNode = notificationSound.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(notificationSound.destination);
+            
+            oscillator.frequency.value = 1000;
+            oscillator.type = 'sine';
+            
+            // Pulsing effect
+            gainNode.gain.setValueAtTime(0.3, notificationSound.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.1, notificationSound.currentTime + 0.5);
+            gainNode.gain.exponentialRampToValueAtTime(0.3, notificationSound.currentTime + 1.0);
+            
+            oscillator.start(notificationSound.currentTime);
+            oscillator.stop(notificationSound.currentTime + 1.0);
+        }
+    } catch (error) {
+        console.warn('Could not play alarm sound:', error);
+    }
+}
+
+// Alarm modal function
+function showAlarmModal(notification) {
+    // Remove existing alarm modal if any
+    const existingModal = document.getElementById('alarm-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const modal = document.createElement('div');
+    modal.id = 'alarm-modal';
+    modal.className = 'alarm-modal';
+    modal.innerHTML = `
+        <div class="alarm-content">
+            <div class="alarm-header">
+                <i class="fas fa-bell alarm-icon"></i>
+                <h3>💊 Medicine Reminder</h3>
+            </div>
+            <div class="alarm-message">
+                <p>${notification.message}</p>
+                <p class="alarm-time">${new Date().toLocaleTimeString()}</p>
+            </div>
+            <div class="alarm-actions">
+                <button class="btn btn-success" onclick="handleAlarmAction('taken', ${notification.id})">
+                    <i class="fas fa-check"></i> Mark as Taken
+                </button>
+                <button class="btn btn-warning" onclick="handleAlarmAction('snooze', ${notification.id})">
+                    <i class="fas fa-clock"></i> Snooze 10 min
+                </button>
+                <button class="btn btn-secondary" onclick="closeAlarmModal()">
+                    <i class="fas fa-times"></i> Dismiss
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Auto-close after 5 minutes
+    setTimeout(() => {
+        if (document.body.contains(modal)) {
+            closeAlarmModal();
+        }
+    }, 5 * 60 * 1000);
+}
+
+function closeAlarmModal() {
+    const modal = document.getElementById('alarm-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+async function handleAlarmAction(action, notificationId) {
+    if (action === 'taken') {
+        // Extract medicine ID from notification
+        const medicineId = await getMedicineIdFromNotification(notificationId);
+        if (medicineId) {
+            await logMedicineTaken(medicineId);
+            showSnackbar('Medicine marked as taken!');
+        }
+    } else if (action === 'snooze') {
+        // Snooze logic - reschedule alarm for 10 minutes later
+        showSnackbar('Reminder snoozed for 10 minutes');
+        setTimeout(() => {
+            checkDueReminders();
+        }, 10 * 60 * 1000);
+    }
+    
+    closeAlarmModal();
+}
+
+async function getMedicineIdFromNotification(notificationId) {
     try {
         const response = await fetch('/api/user_notifications');
         const data = await response.json();
-        
         if (data.success) {
-            const unreadNotifications = data.notifications.filter(n => !n.is_read);
-            
-            if (unreadNotifications.length > 0) {
-                // Show notification badge
-                updateNotificationBadge(unreadNotifications.length);
-                
-                // Show latest unread notification
-                const latestNotification = unreadNotifications[0];
-                if (!sessionStorage.getItem(`notification_${latestNotification.id}_shown`)) {
-                    showSnackbar(latestNotification.message, 'info');
-                    sessionStorage.setItem(`notification_${latestNotification.id}_shown`, 'true');
-                }
-            } else {
-                updateNotificationBadge(0);
-            }
+            const notification = data.notifications.find(n => n.id === notificationId);
+            return notification ? notification.medicine_id : null;
         }
     } catch (error) {
-        console.error('Error checking notifications:', error);
+        console.error('Error getting medicine ID:', error);
     }
+    return null;
 }
 
 // Update notification badge
 function updateNotificationBadge(count) {
+    const notificationBell = document.getElementById('notification-bell');
+    if (!notificationBell) return;
+    
     let badge = document.getElementById('notification-badge');
     
     if (count > 0) {
         if (!badge) {
-            // Create badge if it doesn't exist
-            const dropdownBtn = document.querySelector('.dropdown-btn');
-            if (dropdownBtn) {
-                badge = document.createElement('span');
-                badge.id = 'notification-badge';
-                badge.className = 'notification-badge';
-                dropdownBtn.appendChild(badge);
-            }
+            badge = document.createElement('span');
+            badge.id = 'notification-badge';
+            badge.className = 'notification-badge';
+            notificationBell.appendChild(badge);
         }
         badge.textContent = count > 9 ? '9+' : count.toString();
         badge.style.display = 'flex';
@@ -181,117 +273,6 @@ function updateNotificationBadge(count) {
         badge.style.display = 'none';
     }
 }
-
-// Add notification section to user dashboard
-async function loadUserNotifications() {
-    try {
-        const response = await fetch('/api/user_notifications');
-        const data = await response.json();
-        
-        const notificationsList = document.getElementById('notifications-list');
-        if (!notificationsList) return;
-        
-        if (data.success && data.notifications.length > 0) {
-            notificationsList.innerHTML = data.notifications.map(notification => `
-                <div class="notification-card ${notification.is_read ? 'read' : 'unread'}">
-                    <div class="notification-header">
-                        <span class="notification-message">${notification.message}</span>
-                        <span class="notification-time">${notification.created_at}</span>
-                    </div>
-                    ${notification.medicine_name ? `
-                        <div class="notification-medicine">
-                            <i class="fas fa-pills"></i> ${notification.medicine_name}
-                        </div>
-                    ` : ''}
-                    ${!notification.is_read ? `
-                        <div class="notification-actions">
-                            <button class="btn btn-sm" onclick="markNotificationAsRead(${notification.id})">
-                                <i class="fas fa-check"></i> Mark as Read
-                            </button>
-                        </div>
-                    ` : ''}
-                </div>
-            `).join('');
-        } else {
-            notificationsList.innerHTML = `
-                <div style="text-align: center; padding: 20px; color: #64748b;">
-                    <p>No notifications</p>
-                </div>
-            `;
-        }
-    } catch (error) {
-        console.error('Failed to load notifications:', error);
-    }
-}
-
-// Mark notification as read
-async function markNotificationAsRead(notificationId) {
-    try {
-        const response = await fetch(`/api/mark_notification_read/${notificationId}`, {
-            method: 'POST'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            await loadUserNotifications();
-            await checkUnreadNotifications();
-        }
-    } catch (error) {
-        console.error('Failed to mark notification as read:', error);
-    }
-}
-
-// Update loadUserDashboard function
-async function loadUserDashboard() {
-    if (!currentUser) return;
-    
-    document.getElementById('user-name').textContent = currentUser.username;
-    await loadStats();
-    await loadUserMedicines();
-    await loadUpcomingReminders();
-    await loadUserNotifications(); // Add this line
-    
-    // Request notification permission
-    requestNotificationPermission();
-}
-
-// Request browser notification permission
-function requestNotificationPermission() {
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().then(permission => {
-            console.log('Notification permission:', permission);
-        });
-    }
-}
-
-// Add to setupEventListeners function
-function setupEventListeners() {
-    // ... existing code ...
-    
-    // Notification bell click
-    const notificationBell = document.getElementById('notification-bell');
-    if (notificationBell) {
-        notificationBell.addEventListener('click', function() {
-            showScreen('notifications-screen');
-        });
-    }
-}
-
-// Initialize app
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Medicine Reminder App Initialized');
-    
-    // Set current date for start date field
-    const startDateField = document.getElementById('start-date');
-    if (startDateField) {
-        startDateField.valueAsDate = new Date();
-    }
-    
-    // Check authentication status immediately
-    checkAuthStatus();
-    setupEventListeners();
-});
 
 // Event listeners
 function setupEventListeners() {
@@ -310,10 +291,13 @@ function setupEventListeners() {
     // Medicine form
     const medicineForm = document.getElementById('medicine-form');
     if (medicineForm) {
-        medicineForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            handleMedicineSubmit(e);
-        });
+        medicineForm.addEventListener('submit', handleMedicineSubmit);
+    }
+    
+    // Notification bell
+    const notificationBell = document.getElementById('notification-bell');
+    if (notificationBell) {
+        notificationBell.addEventListener('click', showNotificationsScreen);
     }
     
     // Close dropdown when clicking outside
@@ -345,6 +329,7 @@ async function handleMedicineSubmit(e) {
     const frequency = document.getElementById('frequency').value;
     const scheduleType = document.getElementById('schedule-type').value;
     const timesPerDay = document.getElementById('times-per-day').value;
+    const specificTimesInput = document.getElementById('specific-times').value;
     const startDate = document.getElementById('start-date').value;
     const endDate = document.getElementById('end-date').value;
     const instructions = document.getElementById('instructions').value;
@@ -352,12 +337,25 @@ async function handleMedicineSubmit(e) {
     
     console.log('📋 Form data:', { 
         medicineName, dosage, frequency, scheduleType, 
-        timesPerDay, startDate, endDate, instructions, priority 
+        timesPerDay, specificTimesInput, startDate, endDate, instructions, priority 
     });
     
     // Validate form
     if (!validateMedicineForm()) {
         return;
+    }
+    
+    // Handle specific times
+    let specific_times = null;
+    if (specificTimesInput) {
+        specific_times = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
+        // Validate time format
+        for (let time of specific_times) {
+            if (!isValidTimeFormat(time)) {
+                showSnackbar(`Invalid time format: ${time}. Use HH:MM format (e.g., 08:00,14:00,20:00)`, 'error');
+                return;
+            }
+        }
     }
     
     try {
@@ -380,6 +378,7 @@ async function handleMedicineSubmit(e) {
                 frequency: frequency,
                 schedule_type: scheduleType,
                 times_per_day: parseInt(timesPerDay),
+                specific_times: specific_times,
                 start_date: startDate,
                 end_date: endDate || null,
                 instructions: instructions,
@@ -441,6 +440,11 @@ function validateMedicineForm() {
     }
     
     return true;
+}
+
+function isValidTimeFormat(time) {
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    return timeRegex.test(time);
 }
 
 // Authentication functions
@@ -506,6 +510,9 @@ async function handleLogin(e) {
         if (data.success) {
             currentUser = data.user;
             console.log(`Login successful! User role: ${currentUser.role}`);
+            
+            // Request notification permission
+            requestNotificationPermission();
             
             if (currentUser.role === 'admin') {
                 console.log('Redirecting to admin dashboard...');
@@ -594,6 +601,15 @@ async function logout() {
     }
 }
 
+// Request browser notification permission
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+            console.log('Notification permission:', permission);
+        });
+    }
+}
+
 // Dashboard functions
 async function loadUserDashboard() {
     if (!currentUser) return;
@@ -637,7 +653,18 @@ async function loadUserMedicines() {
         const medicinesList = document.getElementById('medicines-list');
         
         if (data.success && data.medicines.length > 0) {
-            medicinesList.innerHTML = data.medicines.map(medicine => `
+            medicinesList.innerHTML = data.medicines.map(medicine => {
+                let specificTimesDisplay = '';
+                if (medicine.specific_times) {
+                    try {
+                        const times = JSON.parse(medicine.specific_times);
+                        specificTimesDisplay = times.join(', ');
+                    } catch (e) {
+                        specificTimesDisplay = medicine.specific_times;
+                    }
+                }
+                
+                return `
                 <div class="medicine-card">
                     <div class="medicine-header">
                         <span class="medicine-name">${medicine.medicine_name}</span>
@@ -651,6 +678,11 @@ async function loadUserMedicines() {
                     <div class="medicine-schedule">
                         <i class="fas fa-calendar"></i> ${medicine.frequency} • ${medicine.schedule_type}
                     </div>
+                    ${specificTimesDisplay ? `
+                        <div class="medicine-times">
+                            <i class="fas fa-clock"></i> Times: ${specificTimesDisplay}
+                        </div>
+                    ` : ''}
                     ${medicine.instructions ? `
                         <div class="medicine-instructions">
                             <i class="fas fa-info-circle"></i> ${medicine.instructions}
@@ -679,7 +711,8 @@ async function loadUserMedicines() {
                         </button>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         } else {
             medicinesList.innerHTML = `
                 <div style="text-align: center; padding: 40px 20px; color: #64748b;">
@@ -799,6 +832,22 @@ async function logMedicineMissed(medicineId) {
         console.error('Failed to log medicine:', error);
         showSnackbar('Failed to log medicine', 'error');
     }
+}
+
+async function markNotificationAsRead(notificationId) {
+    try {
+        const response = await fetch(`/api/mark_notification_read/${notificationId}`, {
+            method: 'POST'
+        });
+        return await response.json();
+    } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+    }
+}
+
+function showNotificationsScreen() {
+    // You can implement a notifications screen here
+    showSnackbar('Notifications feature coming soon!', 'info');
 }
 
 function showMedicineHistory() {
@@ -979,243 +1028,3 @@ async function loadAdminStats() {
         console.error('Failed to load admin stats:', error);
     }
 }
-// Add to the medicine form in index.html (add this after times-per-day input)
-<div class="form-group">
-    <i class="fas fa-clock"></i>
-    <input type="text" id="specific-times" placeholder="Specific times (e.g., 08:00,14:00,20:00)">
-    <small style="font-size: 12px; color: #64748b;">Enter comma-separated times (24-hour format)</small>
-</div>
-
-// Update handleMedicineSubmit function in script.js
-async function handleMedicineSubmit(e) {
-    e.preventDefault();
-    
-    // ... existing validation ...
-    
-    // Get specific times
-    const specificTimesInput = document.getElementById('specific-times').value;
-    let specific_times = null;
-    
-    if (specificTimesInput) {
-        specific_times = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
-        // Validate time format
-        for (let time of specific_times) {
-            if (!isValidTimeFormat(time)) {
-                showSnackbar(`Invalid time format: ${time}. Use HH:MM format`, 'error');
-                return;
-            }
-        }
-    }
-    
-    try {
-        // ... existing code ...
-        
-        const response = await fetch('/api/add_medicine', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                medicine_name: medicineName,
-                dosage: dosage,
-                frequency: frequency,
-                schedule_type: scheduleType,
-                times_per_day: parseInt(timesPerDay),
-                specific_times: specific_times,
-                start_date: startDate,
-                end_date: endDate || null,
-                instructions: instructions,
-                priority: priority
-            })
-        });
-        
-        // ... rest of the function ...
-    } catch (error) {
-        console.error('💥 Medicine addition error:', error);
-        showSnackbar('Failed to add medicine. Please try again.', 'error');
-    }
-}
-
-// Add time validation function
-function isValidTimeFormat(time) {
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-    return timeRegex.test(time);
-}
-
-// Enhanced reminder checking
-async function checkDueReminders() {
-    try {
-        const response = await fetch('/api/user_notifications');
-        const data = await response.json();
-        
-        if (data.success) {
-            const unreadNotifications = data.notifications.filter(n => !n.is_read);
-            
-            // Check for new notifications to show as alarms
-            for (const notification of unreadNotifications) {
-                if (notification.type === 'reminder' && !sessionStorage.getItem(`alarm_shown_${notification.id}`)) {
-                    showMedicineAlarm(notification);
-                    sessionStorage.setItem(`alarm_shown_${notification.id}`, 'true');
-                }
-            }
-            
-            updateNotificationBadge(unreadNotifications.length);
-        }
-    } catch (error) {
-        console.error('Error checking reminders:', error);
-    }
-}
-
-// Enhanced alarm function
-function showMedicineAlarm(notification) {
-    // Play alarm sound
-    playAlarmSound();
-    
-    // Show browser notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-        const alarmNotification = new Notification('💊 Medicine Reminder', {
-            body: notification.message,
-            icon: '/static/icon-192.png',
-            tag: 'medicine-alarm',
-            requireInteraction: true,
-            actions: [
-                {
-                    action: 'taken',
-                    title: '✅ Taken'
-                },
-                {
-                    action: 'snooze',
-                    title: '⏰ Snooze 10 min'
-                }
-            ]
-        });
-        
-        alarmNotification.onclick = function() {
-            window.focus();
-            alarmNotification.close();
-        };
-    }
-    
-    // Show in-app alarm modal
-    showAlarmModal(notification);
-}
-
-// Alarm modal function
-function showAlarmModal(notification) {
-    // Remove existing alarm modal if any
-    const existingModal = document.getElementById('alarm-modal');
-    if (existingModal) {
-        existingModal.remove();
-    }
-    
-    const modal = document.createElement('div');
-    modal.id = 'alarm-modal';
-    modal.className = 'alarm-modal';
-    modal.innerHTML = `
-        <div class="alarm-content">
-            <div class="alarm-header">
-                <i class="fas fa-bell alarm-icon"></i>
-                <h3>Medicine Reminder</h3>
-            </div>
-            <div class="alarm-message">
-                <p>${notification.message}</p>
-            </div>
-            <div class="alarm-actions">
-                <button class="btn btn-success" onclick="handleAlarmAction('taken', ${notification.id})">
-                    <i class="fas fa-check"></i> Mark as Taken
-                </button>
-                <button class="btn btn-warning" onclick="handleAlarmAction('snooze', ${notification.id})">
-                    <i class="fas fa-clock"></i> Snooze 10 min
-                </button>
-                <button class="btn btn-secondary" onclick="closeAlarmModal()">
-                    <i class="fas fa-times"></i> Dismiss
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Auto-close after 5 minutes
-    setTimeout(() => {
-        if (document.body.contains(modal)) {
-            closeAlarmModal();
-        }
-    }, 5 * 60 * 1000);
-}
-
-function closeAlarmModal() {
-    const modal = document.getElementById('alarm-modal');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-async function handleAlarmAction(action, notificationId) {
-    if (action === 'taken') {
-        // Extract medicine ID from notification (you might need to adjust this)
-        const medicineId = await getMedicineIdFromNotification(notificationId);
-        if (medicineId) {
-            await logMedicineTaken(medicineId);
-        }
-    } else if (action === 'snooze') {
-        // Snooze logic - reschedule alarm for 10 minutes later
-        setTimeout(() => {
-            checkDueReminders();
-        }, 10 * 60 * 1000);
-    }
-    
-    // Mark notification as read
-    await markNotificationAsRead(notificationId);
-    closeAlarmModal();
-}
-
-async function getMedicineIdFromNotification(notificationId) {
-    try {
-        const response = await fetch('/api/user_notifications');
-        const data = await response.json();
-        if (data.success) {
-            const notification = data.notifications.find(n => n.id === notificationId);
-            return notification ? notification.medicine_id : null;
-        }
-    } catch (error) {
-        console.error('Error getting medicine ID:', error);
-    }
-    return null;
-}
-
-// Enhanced notification sound
-function playAlarmSound() {
-    if (!notificationSound) return;
-    
-    try {
-        if (notificationSound === 'fallback') {
-            // More noticeable fallback sound
-            for (let i = 0; i < 3; i++) {
-                setTimeout(() => console.log('\x07'), i * 500);
-            }
-        } else {
-            // More urgent alarm sound
-            const oscillator = notificationSound.createOscillator();
-            const gainNode = notificationSound.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(notificationSound.destination);
-            
-            oscillator.frequency.value = 1000;
-            oscillator.type = 'sine';
-            
-            // Pulsing effect
-            gainNode.gain.setValueAtTime(0.3, notificationSound.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.1, notificationSound.currentTime + 0.5);
-            gainNode.gain.exponentialRampToValueAtTime(0.3, notificationSound.currentTime + 1.0);
-            
-            oscillator.start(notificationSound.currentTime);
-            oscillator.stop(notificationSound.currentTime + 1.0);
-        }
-    } catch (error) {
-        console.warn('Could not play alarm sound:', error);
-    }
-}
-
-
