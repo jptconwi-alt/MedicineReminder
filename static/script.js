@@ -4,15 +4,21 @@ let authCheckTimeout;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, starting auth check...');
+    console.log('DOM loaded, starting 2-second loading screen...');
     
-    authCheckTimeout = setTimeout(() => {
-        console.log('Auth check timeout reached, forcing login screen');
+    // Set current date for start date field
+    const startDateField = document.getElementById('start-date');
+    if (startDateField) {
+        startDateField.valueAsDate = new Date();
+    }
+    
+    // Show loading screen for exactly 2 seconds, then go to login
+    setTimeout(() => {
+        console.log('2-second loading complete, showing login screen');
         hideLoading();
         showScreen('login-screen');
-    }, 5000);
+    }, 2000); // 2000ms = 2 seconds
     
-    checkAuthStatus();
     setupEventListeners();
 });
 
@@ -38,6 +44,17 @@ function setupEventListeners() {
             handleMedicineSubmit(e);
         });
     }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const dropdown = document.getElementById('user-dropdown');
+        const dropdownBtn = document.querySelector('.dropdown-btn');
+        
+        if (dropdown && dropdownBtn && !dropdownBtn.contains(event.target) && !dropdown.contains(event.target)) {
+            dropdown.classList.add('hidden');
+            dropdownBtn.classList.remove('active');
+        }
+    });
 }
 
 // Medicine functions
@@ -106,6 +123,8 @@ async function handleMedicineSubmit(e) {
             showSnackbar('Medicine added successfully!');
             // Reset form
             document.getElementById('medicine-form').reset();
+            // Set current date for start date
+            document.getElementById('start-date').valueAsDate = new Date();
             // Refresh stats and medicines
             await loadStats();
             await loadUserMedicines();
@@ -153,7 +172,7 @@ function validateMedicineForm() {
     return true;
 }
 
-// Authentication functions (same as community care)
+// Authentication functions
 async function checkAuthStatus() {
     try {
         console.log('Checking auth status...');
@@ -165,8 +184,6 @@ async function checkAuthStatus() {
         
         const data = await response.json();
         console.log('Auth response:', data);
-        
-        clearTimeout(authCheckTimeout);
         
         if (data.success) {
             currentUser = data.user;
@@ -184,7 +201,6 @@ async function checkAuthStatus() {
         }
     } catch (error) {
         console.error('Auth check failed:', error);
-        clearTimeout(authCheckTimeout);
         showScreen('login-screen');
     } finally {
         hideLoading();
@@ -569,7 +585,7 @@ async function loadMedicineHistory() {
     }
 }
 
-// Utility functions (same as community care)
+// Utility functions
 function showScreen(screenId) {
     console.log(`Switching to screen: ${screenId}`);
     
@@ -614,18 +630,28 @@ function hideLoading() {
 
 function togglePassword(inputId) {
     const input = document.getElementById(inputId);
-    const icon = input.nextElementSibling.querySelector('i');
+    const icon = input.parentNode.querySelector('.toggle-password i');
     
     if (input.type === 'password') {
         input.type = 'text';
-        icon.className = 'fas fa-eye-slash';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
     } else {
         input.type = 'password';
-        icon.className = 'fas fa-eye';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
     }
 }
 
-// Admin functions (similar structure to community care)
+function toggleDropdown() {
+    const dropdown = document.getElementById('user-dropdown');
+    const dropdownBtn = document.querySelector('.dropdown-btn');
+    
+    dropdown.classList.toggle('hidden');
+    dropdownBtn.classList.toggle('active');
+}
+
+// Admin functions
 async function loadAdminDashboard() {
     if (!currentUser || currentUser.role !== 'admin') return;
     
