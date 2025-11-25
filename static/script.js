@@ -1,10 +1,9 @@
 // Global variables
 let currentUser = null;
-let authCheckTimeout;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, starting 2-second loading screen...');
+    console.log('Medicine Reminder App Initialized');
     
     // Set current date for start date field
     const startDateField = document.getElementById('start-date');
@@ -12,13 +11,8 @@ document.addEventListener('DOMContentLoaded', function() {
         startDateField.valueAsDate = new Date();
     }
     
-    // Show loading screen for exactly 2 seconds, then go to login
-    setTimeout(() => {
-        console.log('2-second loading complete, showing login screen');
-        hideLoading();
-        showScreen('login-screen');
-    }, 2000); // 2000ms = 2 seconds
-    
+    // Check authentication status immediately
+    checkAuthStatus();
     setupEventListeners();
 });
 
@@ -202,8 +196,6 @@ async function checkAuthStatus() {
     } catch (error) {
         console.error('Auth check failed:', error);
         showScreen('login-screen');
-    } finally {
-        hideLoading();
     }
 }
 
@@ -618,14 +610,6 @@ function showSnackbar(message, type = 'success') {
     setTimeout(() => {
         snackbar.classList.add('hidden');
     }, 3000);
-}
-
-function hideLoading() {
-    const loadingScreen = document.getElementById('loading-screen');
-    if (loadingScreen) {
-        loadingScreen.classList.remove('active');
-        console.log('Loading screen hidden');
-    }
 }
 
 function togglePassword(inputId) {
