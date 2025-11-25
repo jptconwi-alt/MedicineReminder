@@ -12,7 +12,7 @@ import threading
 import time
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, time as dt_time
-import json
+import json  # ADD THIS IMPORT
 
 # Initialize Flask
 app = Flask(__name__, 
@@ -213,6 +213,19 @@ def is_time_matching(current_time, scheduled_time):
         
     except ValueError:
         return False
+
+# Start the scheduler
+try:
+    scheduler.add_job(
+        func=check_medicine_reminders,
+        trigger='cron',
+        minute='*'  # Run every minute to check exact times
+    )
+    scheduler.start()
+    print("✅ Medicine reminder scheduler started (running every minute)")
+except Exception as e:
+    print(f"❌ Failed to start scheduler: {e}")
+
 # New API routes for notifications
 @app.route('/api/user_notifications')
 def get_user_notifications():
@@ -616,9 +629,3 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
-
-
-
-
