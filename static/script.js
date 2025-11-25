@@ -1,6 +1,283 @@
 // Global variables
 let currentUser = null;
 
+// Add to global variables
+let notificationSound = null;
+let reminderInterval = null;
+
+// Add to DOMContentLoaded event listener
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Medicine Reminder App Initialized');
+    
+    // Set current date for start date field
+    const startDateField = document.getElementById('start-date');
+    if (startDateField) {
+        startDateField.valueAsDate = new Date();
+    }
+    
+    // Initialize notification sound
+    initializeNotificationSound();
+    
+    // Check authentication status immediately
+    checkAuthStatus();
+    setupEventListeners();
+    
+    // Start reminder checking
+    startReminderChecking();
+});
+
+// Initialize notification sound
+function initializeNotificationSound() {
+    try {
+        // Create a simple beep sound using Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        notificationSound = audioContext;
+        console.log('🔊 Notification sound initialized');
+    } catch (error) {
+        console.warn('🔇 Web Audio API not supported, using fallback');
+        notificationSound = 'fallback';
+    }
+}
+
+// Play notification sound
+function playNotificationSound() {
+    if (!notificationSound) return;
+    
+    try {
+        if (notificationSound === 'fallback') {
+            // Fallback: Use browser's built-in beep
+            console.log('\x07'); // ASCII bell character
+        } else {
+            // Web Audio API beep
+            const oscillator = notificationSound.createOscillator();
+            const gainNode = notificationSound.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(notificationSound.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, notificationSound.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, notificationSound.currentTime + 1);
+            
+            oscillator.start(notificationSound.currentTime);
+            oscillator.stop(notificationSound.currentTime + 1);
+        }
+    } catch (error) {
+        console.warn('Could not play notification sound:', error);
+    }
+}
+
+// Start checking for reminders
+function startReminderChecking() {
+    // Check every minute for due reminders
+    reminderInterval = setInterval(async () => {
+        if (currentUser) {
+            await checkDueReminders();
+        }
+    }, 60000); // Check every minute
+    
+    // Also check immediately
+    if (currentUser) {
+        setTimeout(() => checkDueReminders(), 2000);
+    }
+}
+
+// Check for due reminders
+async function checkDueReminders() {
+    try {
+        const response = await fetch('/api/upcoming_reminders');
+        const data = await response.json();
+        
+        if (data.success && data.reminders.length > 0) {
+            const currentTime = new Date();
+            const currentHour = currentTime.getHours();
+            const currentMinute = currentTime.getMinutes();
+            
+            // Check if it's reminder time (9 AM by default)
+            if (currentHour === 9 && currentMinute === 0) {
+                showMedicineReminder(data.reminders);
+            }
+            
+            // Also check for unread notifications
+            await checkUnreadNotifications();
+        }
+    } catch (error) {
+        console.error('Error checking reminders:', error);
+    }
+}
+
+// Show medicine reminder notification
+function showMedicineReminder(reminders) {
+    if (reminders.length === 0) return;
+    
+    // Play sound
+    playNotificationSound();
+    
+    // Show browser notification if supported
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const medicineNames = reminders.map(r => r.medicine_name).join(', ');
+        new Notification('Medicine Reminder', {
+            body: `Time to take your medicines: ${medicineNames}`,
+            icon: '/static/icon-192.png',
+            tag: 'medicine-reminder'
+        });
+    }
+    
+    // Show in-app notification
+    showSnackbar(`💊 Time to take your medicines!`, 'warning');
+    
+    // Update reminders list
+    loadUpcomingReminders();
+}
+
+// Check for unread notifications
+async function checkUnreadNotifications() {
+    try {
+        const response = await fetch('/api/user_notifications');
+        const data = await response.json();
+        
+        if (data.success) {
+            const unreadNotifications = data.notifications.filter(n => !n.is_read);
+            
+            if (unreadNotifications.length > 0) {
+                // Show notification badge
+                updateNotificationBadge(unreadNotifications.length);
+                
+                // Show latest unread notification
+                const latestNotification = unreadNotifications[0];
+                if (!sessionStorage.getItem(`notification_${latestNotification.id}_shown`)) {
+                    showSnackbar(latestNotification.message, 'info');
+                    sessionStorage.setItem(`notification_${latestNotification.id}_shown`, 'true');
+                }
+            } else {
+                updateNotificationBadge(0);
+            }
+        }
+    } catch (error) {
+        console.error('Error checking notifications:', error);
+    }
+}
+
+// Update notification badge
+function updateNotificationBadge(count) {
+    let badge = document.getElementById('notification-badge');
+    
+    if (count > 0) {
+        if (!badge) {
+            // Create badge if it doesn't exist
+            const dropdownBtn = document.querySelector('.dropdown-btn');
+            if (dropdownBtn) {
+                badge = document.createElement('span');
+                badge.id = 'notification-badge';
+                badge.className = 'notification-badge';
+                dropdownBtn.appendChild(badge);
+            }
+        }
+        badge.textContent = count > 9 ? '9+' : count.toString();
+        badge.style.display = 'flex';
+    } else if (badge) {
+        badge.style.display = 'none';
+    }
+}
+
+// Add notification section to user dashboard
+async function loadUserNotifications() {
+    try {
+        const response = await fetch('/api/user_notifications');
+        const data = await response.json();
+        
+        const notificationsList = document.getElementById('notifications-list');
+        if (!notificationsList) return;
+        
+        if (data.success && data.notifications.length > 0) {
+            notificationsList.innerHTML = data.notifications.map(notification => `
+                <div class="notification-card ${notification.is_read ? 'read' : 'unread'}">
+                    <div class="notification-header">
+                        <span class="notification-message">${notification.message}</span>
+                        <span class="notification-time">${notification.created_at}</span>
+                    </div>
+                    ${notification.medicine_name ? `
+                        <div class="notification-medicine">
+                            <i class="fas fa-pills"></i> ${notification.medicine_name}
+                        </div>
+                    ` : ''}
+                    ${!notification.is_read ? `
+                        <div class="notification-actions">
+                            <button class="btn btn-sm" onclick="markNotificationAsRead(${notification.id})">
+                                <i class="fas fa-check"></i> Mark as Read
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            `).join('');
+        } else {
+            notificationsList.innerHTML = `
+                <div style="text-align: center; padding: 20px; color: #64748b;">
+                    <p>No notifications</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Failed to load notifications:', error);
+    }
+}
+
+// Mark notification as read
+async function markNotificationAsRead(notificationId) {
+    try {
+        const response = await fetch(`/api/mark_notification_read/${notificationId}`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await loadUserNotifications();
+            await checkUnreadNotifications();
+        }
+    } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+    }
+}
+
+// Update loadUserDashboard function
+async function loadUserDashboard() {
+    if (!currentUser) return;
+    
+    document.getElementById('user-name').textContent = currentUser.username;
+    await loadStats();
+    await loadUserMedicines();
+    await loadUpcomingReminders();
+    await loadUserNotifications(); // Add this line
+    
+    // Request notification permission
+    requestNotificationPermission();
+}
+
+// Request browser notification permission
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+            console.log('Notification permission:', permission);
+        });
+    }
+}
+
+// Add to setupEventListeners function
+function setupEventListeners() {
+    // ... existing code ...
+    
+    // Notification bell click
+    const notificationBell = document.getElementById('notification-bell');
+    if (notificationBell) {
+        notificationBell.addEventListener('click', function() {
+            showScreen('notifications-screen');
+        });
+    }
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Medicine Reminder App Initialized');
@@ -702,3 +979,4 @@ async function loadAdminStats() {
         console.error('Failed to load admin stats:', error);
     }
 }
+
