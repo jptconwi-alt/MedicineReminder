@@ -1,257 +1,468 @@
-from flask import Flask, request, jsonify, send_from_directory
-from flask_cors import CORS
+from flask import Flask, render_template, request, jsonify, session, send_from_directory
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
+import base64
 import os
-import datetime
-import json
-import psycopg2
-from dotenv import load_dotenv
+import re
+from flask_cors import CORS
+from PIL import Image
+import io
 
-load_dotenv()
+# Initialize Flask
+app = Flask(__name__, 
+            static_folder='static',
+            static_url_path='/static',
+            template_folder='templates')
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-2024')
 CORS(app)
 
-# Database connection
-def get_db_connection():
-    database_url = os.getenv('DATABASE_URL')
-    
-    if database_url:
-        # Parse the database URL for Render
-        if database_url.startswith('postgres://'):
-            database_url = database_url.replace('postgres://', 'postgresql://', 1)
-        
-        conn = psycopg2.connect(database_url)
-    else:
-        # Fallback to individual environment variables (for local development)
-        conn = psycopg2.connect(
-            host=os.getenv('DB_HOST'),
-            database=os.getenv('DB_NAME'),
-            user=os.getenv('DB_USER'),
-            password=os.getenv('DB_PASSWORD'),
-            port=os.getenv('DB_PORT')
-        )
-    return conn
+# Database configuration
+DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://medicine_user:password@localhost/medicinereminder')
 
-# The rest of your app.py code remains exactly the same...
-# Initialize database tables
-def init_db():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Create users table
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id SERIAL PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            email VARCHAR(100) UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # Create medicines table
-    cur.execute('''
-        CREATE TABLE IF NOT EXISTS medicines (
-            medicine_id SERIAL PRIMARY KEY,
-            user_id INTEGER REFERENCES users(user_id),
-            medicine_name VARCHAR(100) NOT NULL,
-            dosage VARCHAR(50) NOT NULL,
-            instructions TEXT,
-            start_time VARCHAR(20) NOT NULL,
-            status VARCHAR(20) DEFAULT 'Pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    conn.commit()
-    cur.close()
-    conn.close()
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_recycle': 300,
+    'pool_pre_ping': True
+}
 
-@app.route('/api/user', methods=['POST'])
-def get_or_create_user():
-    data = request.get_json()
-    name = data.get('name')
-    email = data.get('email')
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    # Check if user exists
-    cur.execute('SELECT * FROM users WHERE email = %s', (email,))
-    user = cur.fetchone()
-    
-    if user:
-        user_data = {
-            'user_id': user[0],
-            'name': user[1],
-            'email': user[2]
-        }
-        cur.close()
-        conn.close()
-        return jsonify(user_data)
-    else:
-        # Create new user
-        cur.execute(
-            'INSERT INTO users (name, email) VALUES (%s, %s) RETURNING user_id',
-            (name, email)
-        )
-        user_id = cur.fetchone()[0]
-        conn.commit()
-        
-        user_data = {
-            'user_id': user_id,
-            'name': name,
-            'email': email
-        }
-        cur.close()
-        conn.close()
-        return jsonify(user_data)
+db = SQLAlchemy(app)
 
-@app.route('/api/medicine', methods=['POST'])
+# Database Models
+class User(db.Model):
+    __tablename__ = 'users'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(100), unique=True, nullable=False)
+    password = db.Column(db.String(200), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    phone = db.Column(db.String(20))
+    role = db.Column(db.String(20), default='user')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Medicine(db.Model):
+    __tablename__ = 'medicines'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    medicine_name = db.Column(db.String(100), nullable=False)
+    dosage = db.Column(db.String(100), nullable=False)
+    frequency = db.Column(db.String(50), nullable=False)  # daily, weekly, monthly
+    schedule_type = db.Column(db.String(20), default='fixed')  # fixed, flexible
+    times_per_day = db.Column(db.Integer, default=1)
+    specific_times = db.Column(db.Text)  # JSON string of specific times
+    start_date = db.Column(db.String(50), nullable=False)
+    end_date = db.Column(db.String(50))
+    instructions = db.Column(db.Text)
+    status = db.Column(db.String(20), default='Active')
+    priority = db.Column(db.String(20), default='Medium')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class MedicineLog(db.Model):
+    __tablename__ = 'medicine_logs'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    medicine_id = db.Column(db.Integer, db.ForeignKey('medicines.id'), nullable=False)
+    taken_time = db.Column(db.DateTime, default=datetime.utcnow)
+    scheduled_time = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(20), default='Taken')  # Taken, Missed, Skipped
+    notes = db.Column(db.Text)
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    __table_args__ = {'extend_existing': True}
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    medicine_id = db.Column(db.Integer, db.ForeignKey('medicines.id'))
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50), default='reminder')
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+# Initialize database
+with app.app_context():
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            print(f"🔄 Medicine database initialization attempt {attempt + 1}/{max_retries}")
+            
+            # Test database connection
+            db.session.execute(text('SELECT 1'))
+            print("✅ Database connection successful")
+            
+            # Create all tables
+            db.create_all()
+            print("✅ Tables created/verified")
+            
+            # Create admin user if not exists
+            admin = User.query.filter_by(email='admin@medicine.com').first()
+            if not admin:
+                print("🔄 Creating admin user...")
+                admin = User(
+                    username='admin',
+                    password=generate_password_hash('admin123'),
+                    email='admin@medicine.com',
+                    role='admin'
+                )
+                db.session.add(admin)
+                db.session.commit()
+                print("✅ Admin user created successfully!")
+            else:
+                print(f"✅ Admin user already exists: {admin.username} (role: {admin.role})")
+            
+            print("✅ Medicine database initialized successfully!")
+            break
+            
+        except Exception as e:
+            print(f"❌ Database initialization attempt {attempt + 1} failed: {e}")
+            db.session.rollback()
+            
+            if attempt == max_retries - 1:
+                print("💥 All database initialization attempts failed")
+                print("🔄 Starting application anyway...")
+            import time
+            time.sleep(2)
+
+# Routes
+
+@app.route('/api/add_medicine', methods=['POST'])
 def add_medicine():
-    data = request.get_json()
-    user_id = data.get('user_id')
-    medicine_name = data.get('medicine_name')
-    dosage = data.get('dosage')
-    instructions = data.get('instructions')
-    start_time = data.get('start_time')
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Please login first!'})
     
-    conn = get_db_connection()
-    cur = conn.cursor()
-    
-    cur.execute('''
-        INSERT INTO medicines (user_id, medicine_name, dosage, instructions, start_time)
-        VALUES (%s, %s, %s, %s, %s) RETURNING medicine_id
-    ''', (user_id, medicine_name, dosage, instructions, start_time))
-    
-    medicine_id = cur.fetchone()[0]
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return jsonify({'message': 'Medicine added successfully', 'medicine_id': medicine_id})
+    try:
+        data = request.get_json()
+        medicine = Medicine(
+            user_id=session['user_id'],
+            medicine_name=data.get('medicine_name'),
+            dosage=data.get('dosage'),
+            frequency=data.get('frequency', 'daily'),
+            schedule_type=data.get('schedule_type', 'fixed'),
+            times_per_day=data.get('times_per_day', 1),
+            specific_times=data.get('specific_times'),
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            instructions=data.get('instructions'),
+            priority=data.get('priority', 'Medium')
+        )
+        db.session.add(medicine)
+        db.session.commit()
+        
+        # Create notification
+        notification = Notification(
+            user_id=session['user_id'],
+            medicine_id=medicine.id,
+            message=f'Medicine "{medicine.medicine_name}" added successfully!',
+            type='medicine_added'
+        )
+        db.session.add(notification)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Medicine added successfully!'})
+    except Exception as e:
+        print(f"Error adding medicine: {e}")
+        return jsonify({'success': False, 'message': 'Failed to add medicine'})
 
-@app.route('/api/schedule', methods=['GET'])
-def view_schedule():
-    conn = get_db_connection()
-    cur = conn.cursor()
+@app.route('/api/user_medicines')
+def get_user_medicines():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
     
-    cur.execute('''
-        SELECT m.medicine_id, m.medicine_name, m.dosage, m.instructions, 
-               m.start_time, m.status, u.name as user_name
-        FROM medicines m
-        JOIN users u ON m.user_id = u.user_id
-        ORDER BY m.created_at DESC
-    ''')
-    
-    schedules = []
-    for row in cur.fetchall():
-        schedule = {
-            'medicine_id': row[0],
-            'medicine_name': row[1],
-            'dosage': row[2],
-            'instructions': row[3],
-            'start_time': row[4],
-            'status': row[5],
-            'user_name': row[6]
+    medicines = Medicine.query.filter_by(user_id=session['user_id']).order_by(Medicine.created_at.desc()).all()
+    medicines_data = []
+    for medicine in medicines:
+        # Get today's logs for this medicine
+        today = datetime.utcnow().date()
+        today_logs = MedicineLog.query.filter(
+            MedicineLog.medicine_id == medicine.id,
+            db.func.date(MedicineLog.taken_time) == today
+        ).all()
+        
+        medicine_data = {
+            'id': medicine.id,
+            'medicine_name': medicine.medicine_name,
+            'dosage': medicine.dosage,
+            'frequency': medicine.frequency,
+            'schedule_type': medicine.schedule_type,
+            'times_per_day': medicine.times_per_day,
+            'specific_times': medicine.specific_times,
+            'start_date': medicine.start_date,
+            'end_date': medicine.end_date,
+            'instructions': medicine.instructions,
+            'status': medicine.status,
+            'priority': medicine.priority,
+            'created_at': medicine.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'today_taken': len([log for log in today_logs if log.status == 'Taken']),
+            'today_missed': len([log for log in today_logs if log.status == 'Missed'])
         }
-        schedules.append(schedule)
+        medicines_data.append(medicine_data)
     
-    cur.close()
-    conn.close()
-    return jsonify(schedules)
+    return jsonify({'success': True, 'medicines': medicines_data})
 
-@app.route('/api/history/<int:user_id>', methods=['GET'])
-def view_history(user_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
+@app.route('/api/log_medicine', methods=['POST'])
+def log_medicine():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Please login first!'})
     
-    cur.execute('''
-        SELECT medicine_id, medicine_name, dosage, instructions, start_time, status
-        FROM medicines 
-        WHERE user_id = %s AND status = 'Taken'
-        ORDER BY created_at DESC
-    ''', (user_id,))
+    try:
+        data = request.get_json()
+        medicine_log = MedicineLog(
+            user_id=session['user_id'],
+            medicine_id=data.get('medicine_id'),
+            scheduled_time=data.get('scheduled_time'),
+            status=data.get('status', 'Taken'),
+            notes=data.get('notes')
+        )
+        db.session.add(medicine_log)
+        db.session.commit()
+        
+        medicine = Medicine.query.get(data.get('medicine_id'))
+        if medicine:
+            notification = Notification(
+                user_id=session['user_id'],
+                medicine_id=medicine.id,
+                message=f'Medicine "{medicine.medicine_name}" marked as {data.get("status", "Taken")}',
+                type='medicine_taken'
+            )
+            db.session.add(notification)
+            db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Medicine logged successfully!'})
+    except Exception as e:
+        print(f"Error logging medicine: {e}")
+        return jsonify({'success': False, 'message': 'Failed to log medicine'})
+
+@app.route('/api/medicine_history')
+def get_medicine_history():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
     
-    history = []
-    for row in cur.fetchall():
-        medicine = {
-            'medicine_id': row[0],
-            'medicine_name': row[1],
-            'dosage': row[2],
-            'instructions': row[3],
-            'start_time': row[4],
-            'status': row[5]
+    logs = MedicineLog.query.filter_by(user_id=session['user_id']).order_by(MedicineLog.taken_time.desc()).limit(50).all()
+    logs_data = []
+    for log in logs:
+        medicine = Medicine.query.get(log.medicine_id)
+        log_data = {
+            'id': log.id,
+            'medicine_name': medicine.medicine_name if medicine else 'Unknown',
+            'dosage': medicine.dosage if medicine else '',
+            'scheduled_time': log.scheduled_time,
+            'taken_time': log.taken_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'status': log.status,
+            'notes': log.notes
         }
-        history.append(medicine)
+        logs_data.append(log_data)
     
-    cur.close()
-    conn.close()
-    return jsonify(history)
+    return jsonify({'success': True, 'history': logs_data})
 
-@app.route('/api/reminder/check', methods=['GET'])
-def check_reminder():
-    current_time = datetime.datetime.now().strftime("%I:%M %p")
-    today = datetime.date.today()
-    formatted_date = today.strftime("%B %d, %Y")
+@app.route('/api/stats')
+def get_stats():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
     
-    conn = get_db_connection()
-    cur = conn.cursor()
+    user_id = session['user_id']
+    role = session.get('role', 'user')
     
-    cur.execute('''
-        SELECT medicine_id, medicine_name, dosage, instructions, start_time
-        FROM medicines 
-        WHERE status = 'Pending'
-    ''')
+    if role == 'admin':
+        total_medicines = Medicine.query.count()
+        active_medicines = Medicine.query.filter_by(status='Active').count()
+        total_users = User.query.count()
+        
+        # Today's stats
+        today = datetime.utcnow().date()
+        today_taken = MedicineLog.query.filter(
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Taken'
+        ).count()
+        today_missed = MedicineLog.query.filter(
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Missed'
+        ).count()
+        
+        stats = {
+            'total_medicines': total_medicines,
+            'active_medicines': active_medicines,
+            'total_users': total_users,
+            'today_taken': today_taken,
+            'today_missed': today_missed
+        }
+    else:
+        my_medicines = Medicine.query.filter_by(user_id=user_id).count()
+        active_medicines = Medicine.query.filter_by(user_id=user_id, status='Active').count()
+        
+        # Today's personal stats
+        today = datetime.utcnow().date()
+        today_taken = MedicineLog.query.filter(
+            MedicineLog.user_id == user_id,
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Taken'
+        ).count()
+        today_missed = MedicineLog.query.filter(
+            MedicineLog.user_id == user_id,
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Missed'
+        ).count()
+        
+        stats = {
+            'my_medicines': my_medicines,
+            'active_medicines': active_medicines,
+            'today_taken': today_taken,
+            'today_missed': today_missed
+        }
+    
+    return jsonify({'success': True, 'stats': stats})
+
+@app.route('/api/upcoming_reminders')
+def get_upcoming_reminders():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    # Get active medicines for the user
+    active_medicines = Medicine.query.filter_by(
+        user_id=session['user_id'], 
+        status='Active'
+    ).all()
     
     reminders = []
-    for row in cur.fetchall():
-        medicine_id, medicine_name, dosage, instructions, med_time = row
-        
-        med_dt = datetime.datetime.strptime(med_time, "%I:%M %p")
-        current_dt = datetime.datetime.strptime(current_time, "%I:%M %p")
-        
-        if current_dt >= med_dt:
-            # Update status to Taken
-            cur.execute('''
-                UPDATE medicines SET status = 'Taken' WHERE medicine_id = %s
-            ''', (medicine_id,))
-            
-            reminder = {
-                'medicine_id': medicine_id,
-                'medicine_name': medicine_name,
-                'dosage': dosage,
-                'instructions': instructions,
-                'time': med_time,
-                'date': formatted_date
-            }
-            reminders.append(reminder)
+    current_time = datetime.utcnow()
     
-    conn.commit()
-    cur.close()
-    conn.close()
+    for medicine in active_medicines:
+        # Simple reminder logic - you can enhance this based on schedule_type and specific_times
+        reminder = {
+            'medicine_id': medicine.id,
+            'medicine_name': medicine.medicine_name,
+            'dosage': medicine.dosage,
+            'instructions': medicine.instructions,
+            'priority': medicine.priority,
+            'next_reminder': 'Soon'  # You can implement more sophisticated scheduling
+        }
+        reminders.append(reminder)
     
-    return jsonify(reminders)
+    return jsonify({'success': True, 'reminders': reminders})
 
-@app.route('/api/medicine/<int:medicine_id>/taken', methods=['PUT'])
-def mark_medicine_taken(medicine_id):
-    conn = get_db_connection()
-    cur = conn.cursor()
+# Authentication routes (same as community care)
+@app.route('/api/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+        
+        print(f"🔐 Login attempt for: {email}")
+        
+        if not email or not password:
+            return jsonify({
+                'success': False,
+                'message': 'Email and password are required!'
+            })
+        
+        user = User.query.filter_by(email=email).first()
+        
+        if user:
+            print(f"📋 User found: {user.username}, Role: {user.role}")
+            if check_password_hash(user.password, password):
+                session['user_id'] = user.id
+                session['username'] = user.username
+                session['role'] = user.role
+                session['email'] = user.email
+                
+                print(f"✅ Login successful: {user.username} (role: {user.role})")
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Welcome back, {user.username}!',
+                    'user': {
+                        'id': user.id,
+                        'username': user.username,
+                        'role': user.role,
+                        'email': user.email
+                    }
+                })
+            else:
+                print("❌ Invalid password")
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid email or password!'
+                })
+        else:
+            print("❌ User not found")
+            return jsonify({
+                'success': False,
+                'message': 'Invalid email or password!'
+            })
+            
+    except Exception as e:
+        print(f"💥 Login error: {e}")
+        return jsonify({
+            'success': False,
+            'message': 'Login failed. Please try again.'
+        })
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        email = data.get('email')
+        password = data.get('password')
+        confirm_password = data.get('confirm_password')
+        
+        if not all([username, email, password, confirm_password]):
+            return jsonify({'success': False, 'message': 'Please fill in all required fields!'})
+        
+        if password != confirm_password:
+            return jsonify({'success': False, 'message': 'Passwords do not match!'})
+        
+        # Check if user already exists
+        if User.query.filter_by(email=email).first():
+            return jsonify({'success': False, 'message': 'Email already exists!'})
+        
+        new_user = User(
+            username=username,
+            email=email,
+            password=generate_password_hash(password)
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Account created successfully!'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error creating account!'})
+
+@app.route('/api/user_info')
+def get_user_info():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
     
-    cur.execute('''
-        UPDATE medicines SET status = 'Taken' WHERE medicine_id = %s
-    ''', (medicine_id,))
-    
-    conn.commit()
-    cur.close()
-    conn.close()
-    
-    return jsonify({'message': 'Medicine marked as taken'})
+    return jsonify({
+        'success': True,
+        'user': {
+            'id': session.get('user_id'),
+            'username': session.get('username'),
+            'role': session.get('role'),
+            'email': session.get('email')
+        }
+    })
+
+@app.route('/api/logout')
+def logout():
+    session.clear()
+    return jsonify({'success': True, 'message': 'Logged out successfully!'})
 
 @app.route('/')
-def serve_frontend():
-    return app.send_static_file('index.html')
+def index():
+    return render_template('index.html')
+
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()})
 
 if __name__ == '__main__':
-    init_db()
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False)
