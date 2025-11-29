@@ -1219,54 +1219,58 @@ async function loadUserMedicines() {
                     }
                 }
                 
-                return `
-                <div class="medicine-card">
-                    <div class="medicine-header">
-                        <span class="medicine-name">${medicine.medicine_name}</span>
-                        <span class="medicine-status status-${medicine.status.toLowerCase()}">
-                            ${medicine.status}
-                        </span>
-                    </div>
-                    <div class="medicine-dosage">
-                        <i class="fas fa-pills"></i> ${medicine.dosage}
-                    </div>
-                    <div class="medicine-schedule">
-                        <i class="fas fa-calendar"></i> ${medicine.frequency} • ${medicine.schedule_type}
-                    </div>
-                    ${specificTimesDisplay ? `
-                        <div class="medicine-times">
-                            <i class="fas fa-clock"></i> Times: ${specificTimesDisplay}
-                        </div>
-                    ` : ''}
-                    ${medicine.instructions ? `
-                        <div class="medicine-instructions">
-                            <i class="fas fa-info-circle"></i> ${medicine.instructions}
-                        </div>
-                    ` : ''}
-                    <div class="medicine-footer">
-                        <span>Started: ${medicine.start_date}</span>
-                        <span class="priority-${medicine.priority.toLowerCase()}">${medicine.priority}</span>
-                    </div>
-                    <div class="today-stats">
-                        <div class="stat-taken">
-                            <i class="fas fa-check-circle"></i>
-                            Taken: ${medicine.today_taken}
-                        </div>
-                        <div class="stat-missed">
-                            <i class="fas fa-times-circle"></i>
-                            Missed: ${medicine.today_missed}
-                        </div>
-                    </div>
-                    <div class="medicine-actions">
-                        <button class="btn btn-success" onclick="logMedicineTaken(${medicine.id})">
-                            <i class="fas fa-check"></i> Taken
-                        </button>
-                        <button class="btn btn-warning" onclick="logMedicineMissed(${medicine.id})">
-                            <i class="fas fa-times"></i> Missed
-                        </button>
-                    </div>
-                </div>
-                `;
+                // In loadUserMedicines() function, update the medicine card HTML:
+return `
+<div class="medicine-card">
+    <div class="medicine-header">
+        <span class="medicine-name">${medicine.medicine_name}</span>
+        <span class="medicine-status status-${medicine.status.toLowerCase()}">
+            ${medicine.status}
+        </span>
+    </div>
+    <div class="medicine-dosage">
+        <i class="fas fa-pills"></i> ${medicine.dosage}
+    </div>
+    <div class="medicine-schedule">
+        <i class="fas fa-calendar"></i> ${medicine.frequency} • ${medicine.schedule_type}
+    </div>
+    ${specificTimesDisplay ? `
+        <div class="medicine-times">
+            <i class="fas fa-clock"></i> Times: ${specificTimesDisplay}
+        </div>
+    ` : ''}
+    ${medicine.instructions ? `
+        <div class="medicine-instructions">
+            <i class="fas fa-info-circle"></i> ${medicine.instructions}
+        </div>
+    ` : ''}
+    <div class="medicine-footer">
+        <span>Started: ${medicine.start_date}</span>
+        <span class="priority-${medicine.priority.toLowerCase()}">${medicine.priority}</span>
+    </div>
+    <div class="today-stats">
+        <div class="stat-taken">
+            <i class="fas fa-check-circle"></i>
+            Taken: ${medicine.today_taken}
+        </div>
+        <div class="stat-missed">
+            <i class="fas fa-times-circle"></i>
+            Missed: ${medicine.today_missed}
+        </div>
+    </div>
+    <div class="medicine-actions">
+        <button class="btn btn-success" onclick="logMedicineTaken(${medicine.id})">
+            <i class="fas fa-check"></i> Taken
+        </button>
+        <button class="btn btn-warning" onclick="logMedicineMissed(${medicine.id})">
+            <i class="fas fa-times"></i> Missed
+        </button>
+        <button class="btn btn-danger" onclick="removeMedicine(${medicine.id})">
+            <i class="fas fa-trash"></i> Remove
+        </button>
+    </div>
+</div>
+`;
             }).join('');
         } else {
             medicinesList.innerHTML = `
@@ -1368,3 +1372,34 @@ function startReminderChecking() {
     }, 30000);
 }
 
+// Remove medicine function
+async function removeMedicine(medicineId) {
+    if (!confirm('Are you sure you want to remove this medicine?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/remove_medicine/${medicineId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showSnackbar('Medicine removed successfully!');
+            await loadUserMedicines();
+            await loadStats();
+        } else {
+            showSnackbar(data.message || 'Failed to remove medicine', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to remove medicine:', error);
+        showSnackbar('Failed to remove medicine', 'error');
+    }
+}
+
+// Function to show upcoming reminders in menu
+function showUpcomingRemindersMenu() {
+    showScreen('upcoming-reminders-screen');
+    loadUpcomingReminders();
+}
