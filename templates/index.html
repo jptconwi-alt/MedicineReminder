@@ -214,12 +214,12 @@
                                 <option value="flexible">Flexible Schedule</option>
                             </select>
                         </div>
-<!-- Add this after the times-per-day input -->
+<!-- Change this in the medicine form -->
 <div class="form-group">
     <i class="fas fa-clock"></i>
-    <input type="text" id="specific-times" placeholder="Specific times (e.g., 08:00,14:00,20:00)">
+    <input type="text" id="specific-times" placeholder="Specific times (e.g., 08:00 AM, 02:00 PM, 08:00 PM)">
     <small style="font-size: 12px; color: #64748b; display: block; margin-top: 5px;">
-        Enter comma-separated times in 24-hour format (HH:MM)
+        Enter comma-separated times in 12-hour format (HH:MM AM/PM)
     </small>
 </div>
                         <div class="form-group">
@@ -290,6 +290,7 @@
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+
 
 
 
