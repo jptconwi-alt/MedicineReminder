@@ -202,29 +202,81 @@ def generate_default_times(times_per_day):
         return ["09:00"]  # Default fallback
 
 def is_time_matching(current_time, scheduled_time):
-    """Check if current time matches scheduled time (with 1-minute window)"""
+    """Check if current time exactly matches scheduled time"""
     try:
-        # Allow 1-minute window for matching
-        current_dt = datetime.strptime(current_time, '%H:%M')
-        scheduled_dt = datetime.strptime(scheduled_time, '%H:%M')
-        
-        time_diff = abs((current_dt - scheduled_dt).total_seconds())
-        return time_diff <= 60  # 1 minute window
-        
+        # Exact minute matching for precise reminders
+        return current_time == scheduled_time
     except ValueError:
         return False
 
-# Start the scheduler
-try:
-    scheduler.add_job(
-        func=check_medicine_reminders,
-        trigger='cron',
-        minute='*'  # Run every minute to check exact times
-    )
-    scheduler.start()
-    print("✅ Medicine reminder scheduler started (running every minute)")
-except Exception as e:
-    print(f"❌ Failed to start scheduler: {e}")
+def check_medicine_reminders():
+    """Check for due medicines and send notifications based on specific times"""
+    with app.app_context():
+        try:
+            current_time = datetime.utcnow()
+            current_time_str = current_time.strftime('%H:%M')
+            
+            print(f"🔔 Checking reminders at {current_time_str}")
+            
+            # Get all active medicines
+            active_medicines = Medicine.query.filter_by(status='Active').all()
+            
+            for medicine in active_medicines:
+                # Parse specific times if available
+                specific_times = []
+                if medicine.specific_times:
+                    try:
+                        specific_times = json.loads(medicine.specific_times)
+                    except:
+                        specific_times = []
+                
+                # If no specific times, use default times based on times_per_day
+                if not specific_times and medicine.times_per_day:
+                    specific_times = generate_default_times(medicine.times_per_day)
+                
+                # Check if current time matches any scheduled time exactly
+                for scheduled_time in specific_times:
+                    if is_time_matching(current_time_str, scheduled_time):
+                        # Check if we already notified for this medicine at this time today
+                        today = current_time.date()
+                        existing_notification = Notification.query.filter(
+                            Notification.user_id == medicine.user_id,
+                            Notification.medicine_id == medicine.id,
+                            db.func.date(Notification.created_at) == today,
+                            Notification.message.like(f'%{scheduled_time}%')
+                        ).first()
+                        
+                        if not existing_notification:
+                            # Convert to 12-hour format for notification
+                            scheduled_time_12h = convert_to_12h(scheduled_time)
+                            
+                            # Create notification
+                            notification = Notification(
+                                user_id=medicine.user_id,
+                                medicine_id=medicine.id,
+                                message=f'Time to take {medicine.medicine_name} - {medicine.dosage} at {scheduled_time_12h}',
+                                type='reminder'
+                            )
+                            db.session.add(notification)
+                            print(f"✅ Created reminder for {medicine.medicine_name} at {scheduled_time_12h}")
+            
+            db.session.commit()
+            
+        except Exception as e:
+            print(f"❌ Error checking reminders: {e}")
+
+def convert_to_12h(time_24h):
+    """Convert 24-hour time to 12-hour format"""
+    try:
+        hours, minutes = time_24h.split(':')
+        hours = int(hours)
+        am_pm = 'AM' if hours < 12 else 'PM'
+        hours_12 = hours % 12
+        if hours_12 == 0:
+            hours_12 = 12
+        return f"{hours_12}:{minutes} {am_pm}"
+    except:
+        return time_24h
 
 # New API routes for notifications
 @app.route('/api/user_notifications')
@@ -629,3 +681,4 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
