@@ -1268,3 +1268,59 @@ body {
     50% { height: 15px; }
 }
 
+/* Update medicine actions for three buttons */
+.medicine-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+}
+
+.medicine-actions .btn {
+    padding: var(--space-sm);
+    font-size: var(--text-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+/* Responsive design for medicine actions */
+@media (max-width: 480px) {
+    .medicine-actions {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Upcoming reminders screen styles */
+.upcoming-reminder-item {
+    background: var(--surface-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    margin-bottom: var(--space-sm);
+    border-left: 4px solid var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+.upcoming-reminder-item.urgent {
+    border-left-color: var(--danger-color);
+    background: #fef2f2;
+    animation: pulse 2s infinite;
+}
+
+.upcoming-reminder-item .reminder-time {
+    font-weight: 600;
+    color: var(--primary-color);
+    margin-bottom: var(--space-xs);
+}
+
+.upcoming-reminder-item .reminder-medicine {
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: var(--space-xs);
+}
+
+.upcoming-reminder-item .reminder-dosage {
+    color: var(--text-secondary);
+    font-size: var(--text-sm);
+}
