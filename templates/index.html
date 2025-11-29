@@ -123,16 +123,21 @@
                                 Menu
                                 <i class="fas fa-chevron-down dropdown-arrow"></i>
                             </button>
-                            <div id="user-dropdown" class="dropdown-menu hidden">
-                                <button class="dropdown-item" onclick="showMedicineHistory()">
-                                    <i class="fas fa-history"></i>
-                                    Medicine History
-                                </button>
-                                <button class="dropdown-item" onclick="logout()">
-                                    <i class="fas fa-sign-out-alt"></i>
-                                    Logout
-                                </button>
-                            </div>
+                            <!-- Update the dropdown menu in user-dashboard -->
+<div id="user-dropdown" class="dropdown-menu hidden">
+    <button class="dropdown-item" onclick="showUpcomingRemindersMenu()">
+        <i class="fas fa-bell"></i>
+        Upcoming Reminders
+    </button>
+    <button class="dropdown-item" onclick="showMedicineHistory()">
+        <i class="fas fa-history"></i>
+        Medicine History
+    </button>
+    <button class="dropdown-item" onclick="logout()">
+        <i class="fas fa-sign-out-alt"></i>
+        Logout
+    </button>
+</div>
                         </div>
                     </div>
                 </div>
@@ -290,6 +295,7 @@
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
+
 
 
 
