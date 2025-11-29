@@ -124,30 +124,30 @@
                                 <i class="fas fa-chevron-down dropdown-arrow"></i>
                             </button>
                             <!-- Update the dropdown menu in user-dashboard -->
-<div id="user-dropdown" class="dropdown-menu hidden">
-    <button class="dropdown-item" onclick="showUpcomingRemindersMenu()">
-        <i class="fas fa-bell"></i>
-        Upcoming Reminders
-    </button>
-    <button class="dropdown-item" onclick="showMedicineHistory()">
-        <i class="fas fa-history"></i>
-        Medicine History
-    </button>
-    <button class="dropdown-item" onclick="logout()">
-        <i class="fas fa-sign-out-alt"></i>
-        Logout
-    </button>
-</div>
+                            <div id="user-dropdown" class="dropdown-menu hidden">
+                                <button class="dropdown-item" onclick="showUpcomingRemindersMenu()">
+                                    <i class="fas fa-bell"></i>
+                                    Upcoming Reminders
+                                </button>
+                                <button class="dropdown-item" onclick="showMedicineHistory()">
+                                    <i class="fas fa-history"></i>
+                                    Medicine History
+                                </button>
+                                <button class="dropdown-item" onclick="logout()">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    Logout
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-<!-- Add notification bell to header -->
-<div class="header-actions">
-    <button class="notification-bell" id="notification-bell">
-        <i class="fas fa-bell"></i>
-    </button>
-</div>
+                <!-- Add notification bell to header -->
+                <div class="header-actions">
+                    <button class="notification-bell" id="notification-bell">
+                        <i class="fas fa-bell"></i>
+                    </button>
+                </div>
                 
                 <div class="stats-card">
                     <div class="stat-item">
@@ -219,14 +219,14 @@
                                 <option value="flexible">Flexible Schedule</option>
                             </select>
                         </div>
-<!-- Change this in the medicine form -->
-<div class="form-group">
-    <i class="fas fa-clock"></i>
-    <input type="text" id="specific-times" placeholder="Specific times (e.g., 08:00 AM, 02:00 PM, 08:00 PM)">
-    <small style="font-size: 12px; color: #64748b; display: block; margin-top: 5px;">
-        Enter comma-separated times in 12-hour format (HH:MM AM/PM)
-    </small>
-</div>
+                        <!-- Change this in the medicine form -->
+                        <div class="form-group">
+                            <i class="fas fa-clock"></i>
+                            <input type="text" id="specific-times" placeholder="Specific times (e.g., 08:00 AM, 02:00 PM, 08:00 PM)">
+                            <small style="font-size: 12px; color: #64748b; display: block; margin-top: 5px;">
+                                Enter comma-separated times in 12-hour format (HH:MM AM/PM)
+                            </small>
+                        </div>
                         <div class="form-group">
                             <i class="fas fa-clock"></i>
                             <input type="number" id="times-per-day" placeholder="Times per day" value="1" min="1" max="10">
@@ -281,6 +281,21 @@
             </div>
         </div>
 
+        <!-- Upcoming Reminders Screen -->
+        <div id="upcoming-reminders-screen" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('user-dashboard')">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h2>Upcoming Reminders</h2>
+            </div>
+            <div class="screen-content">
+                <div id="upcoming-reminders-list" class="reminders-list">
+                    <!-- Upcoming reminders will be loaded here -->
+                </div>
+            </div>
+        </div>
+
         <!-- Admin Dashboard -->
         <div id="admin-dashboard" class="screen">
             <div class="admin-container">
@@ -295,9 +310,3 @@
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
-
-
-
-
-
-
