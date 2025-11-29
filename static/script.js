@@ -1028,3 +1028,322 @@ async function loadAdminStats() {
         console.error('Failed to load admin stats:', error);
     }
 }
+// Add these utility functions for time conversion
+function convertTo12Hour(time24) {
+    if (!time24) return '';
+    
+    try {
+        const [hours, minutes] = time24.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        return `${hour12}:${minutes} ${ampm}`;
+    } catch (error) {
+        console.error('Error converting time:', error);
+        return time24;
+    }
+}
+
+function convertTo24Hour(time12) {
+    if (!time12) return '';
+    
+    try {
+        const [timePart, ampm] = time12.split(' ');
+        let [hours, minutes] = timePart.split(':');
+        
+        hours = parseInt(hours);
+        if (ampm === 'PM' && hours < 12) {
+            hours += 12;
+        } else if (ampm === 'AM' && hours === 12) {
+            hours = 0;
+        }
+        
+        return `${hours.toString().padStart(2, '0')}:${minutes}`;
+    } catch (error) {
+        console.error('Error converting time:', error);
+        return time12;
+    }
+}
+
+// Update the medicine form validation for 12-hour format
+function isValidTimeFormat12H(time) {
+    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i;
+    return timeRegex.test(time);
+}
+
+// Update the medicine form submission to handle 12-hour format
+async function handleMedicineSubmit(e) {
+    e.preventDefault();
+    
+    console.log('🔍 Medicine form submitted - Starting validation');
+    
+    if (!currentUser) {
+        showSnackbar('Please login first!', 'error');
+        return;
+    }
+    
+    // Get form values
+    const medicineName = document.getElementById('medicine-name').value;
+    const dosage = document.getElementById('dosage').value;
+    const frequency = document.getElementById('frequency').value;
+    const scheduleType = document.getElementById('schedule-type').value;
+    const timesPerDay = document.getElementById('times-per-day').value;
+    const specificTimesInput = document.getElementById('specific-times').value;
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+    const instructions = document.getElementById('instructions').value;
+    const priority = document.getElementById('priority').value;
+    
+    console.log('📋 Form data:', { 
+        medicineName, dosage, frequency, scheduleType, 
+        timesPerDay, specificTimesInput, startDate, endDate, instructions, priority 
+    });
+    
+    // Validate form
+    if (!validateMedicineForm()) {
+        return;
+    }
+    
+    // Handle specific times - convert 12-hour to 24-hour for storage
+    let specific_times = null;
+    if (specificTimesInput) {
+        const timesArray = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
+        specific_times = [];
+        
+        // Validate and convert each time
+        for (let time of timesArray) {
+            if (!isValidTimeFormat12H(time)) {
+                showSnackbar(`Invalid time format: ${time}. Use HH:MM AM/PM format (e.g., 08:00 AM, 02:00 PM, 08:00 PM)`, 'error');
+                return;
+            }
+            // Convert to 24-hour format for storage
+            specific_times.push(convertTo24Hour(time));
+        }
+    }
+    
+    try {
+        // Show loading state
+        const submitBtn = document.getElementById('submit-medicine-btn');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+        submitBtn.disabled = true;
+        
+        console.log('📤 Adding medicine to server...');
+        
+        const response = await fetch('/api/add_medicine', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                medicine_name: medicineName,
+                dosage: dosage,
+                frequency: frequency,
+                schedule_type: scheduleType,
+                times_per_day: parseInt(timesPerDay),
+                specific_times: specific_times,
+                start_date: startDate,
+                end_date: endDate || null,
+                instructions: instructions,
+                priority: priority
+            })
+        });
+        
+        const data = await response.json();
+        console.log('✅ Add medicine response:', data);
+        
+        if (data.success) {
+            showSnackbar('Medicine added successfully!');
+            // Reset form
+            document.getElementById('medicine-form').reset();
+            // Set current date for start date
+            document.getElementById('start-date').valueAsDate = new Date();
+            // Refresh stats and medicines
+            await loadStats();
+            await loadUserMedicines();
+            console.log('🔄 Stats and medicines refreshed');
+        } else {
+            console.error('❌ Medicine addition failed:', data.message);
+            showSnackbar(data.message || 'Failed to add medicine', 'error');
+        }
+    } catch (error) {
+        console.error('💥 Medicine addition error:', error);
+        showSnackbar('Failed to add medicine. Please try again.', 'error');
+    } finally {
+        // Reset button state
+        const submitBtn = document.getElementById('submit-medicine-btn');
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i class="fas fa-plus"></i> Add Medicine';
+            submitBtn.disabled = false;
+        }
+    }
+}
+
+// Update the display functions to show 12-hour format
+async function loadUserMedicines() {
+    try {
+        const response = await fetch('/api/user_medicines');
+        const data = await response.json();
+        
+        const medicinesList = document.getElementById('medicines-list');
+        
+        if (data.success && data.medicines.length > 0) {
+            medicinesList.innerHTML = data.medicines.map(medicine => {
+                let specificTimesDisplay = '';
+                if (medicine.specific_times) {
+                    try {
+                        const times = JSON.parse(medicine.specific_times);
+                        specificTimesDisplay = times.map(time => convertTo12Hour(time)).join(', ');
+                    } catch (e) {
+                        specificTimesDisplay = convertTo12Hour(medicine.specific_times);
+                    }
+                }
+                
+                return `
+                <div class="medicine-card">
+                    <div class="medicine-header">
+                        <span class="medicine-name">${medicine.medicine_name}</span>
+                        <span class="medicine-status status-${medicine.status.toLowerCase()}">
+                            ${medicine.status}
+                        </span>
+                    </div>
+                    <div class="medicine-dosage">
+                        <i class="fas fa-pills"></i> ${medicine.dosage}
+                    </div>
+                    <div class="medicine-schedule">
+                        <i class="fas fa-calendar"></i> ${medicine.frequency} • ${medicine.schedule_type}
+                    </div>
+                    ${specificTimesDisplay ? `
+                        <div class="medicine-times">
+                            <i class="fas fa-clock"></i> Times: ${specificTimesDisplay}
+                        </div>
+                    ` : ''}
+                    ${medicine.instructions ? `
+                        <div class="medicine-instructions">
+                            <i class="fas fa-info-circle"></i> ${medicine.instructions}
+                        </div>
+                    ` : ''}
+                    <div class="medicine-footer">
+                        <span>Started: ${medicine.start_date}</span>
+                        <span class="priority-${medicine.priority.toLowerCase()}">${medicine.priority}</span>
+                    </div>
+                    <div class="today-stats">
+                        <div class="stat-taken">
+                            <i class="fas fa-check-circle"></i>
+                            Taken: ${medicine.today_taken}
+                        </div>
+                        <div class="stat-missed">
+                            <i class="fas fa-times-circle"></i>
+                            Missed: ${medicine.today_missed}
+                        </div>
+                    </div>
+                    <div class="medicine-actions">
+                        <button class="btn btn-success" onclick="logMedicineTaken(${medicine.id})">
+                            <i class="fas fa-check"></i> Taken
+                        </button>
+                        <button class="btn btn-warning" onclick="logMedicineMissed(${medicine.id})">
+                            <i class="fas fa-times"></i> Missed
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        } else {
+            medicinesList.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px; color: #64748b;">
+                    <i class="fas fa-pills" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+                    <p>No medicines added yet</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Failed to load medicines:', error);
+        showSnackbar('Failed to load medicines', 'error');
+    }
+}
+
+// Add countdown display function
+function updateMedicineCountdowns() {
+    const medicineCards = document.querySelectorAll('.medicine-card');
+    
+    medicineCards.forEach(card => {
+        const timesElement = card.querySelector('.medicine-times');
+        if (timesElement) {
+            const timesText = timesElement.textContent.replace('Times: ', '');
+            const times = timesText.split(', ').map(time => time.trim());
+            
+            // Find next upcoming time
+            const now = new Date();
+            let nextTime = null;
+            let minDiff = Infinity;
+            
+            times.forEach(time12 => {
+                const time24 = convertTo24Hour(time12);
+                const [hours, minutes] = time24.split(':');
+                const targetTime = new Date();
+                targetTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                
+                // If time has passed today, set for tomorrow
+                if (targetTime < now) {
+                    targetTime.setDate(targetTime.getDate() + 1);
+                }
+                
+                const diff = targetTime - now;
+                if (diff < minDiff && diff > 0) {
+                    minDiff = diff;
+                    nextTime = targetTime;
+                }
+            });
+            
+            // Update or create countdown element
+            let countdownElement = card.querySelector('.medicine-countdown');
+            if (!countdownElement) {
+                countdownElement = document.createElement('div');
+                countdownElement.className = 'medicine-countdown';
+                card.querySelector('.medicine-footer').before(countdownElement);
+            }
+            
+            if (nextTime) {
+                const hours = Math.floor(minDiff / (1000 * 60 * 60));
+                const minutes = Math.floor((minDiff % (1000 * 60 * 60)) / (1000 * 60));
+                
+                if (hours > 0) {
+                    countdownElement.innerHTML = `<i class="fas fa-hourglass-half"></i> Next dose in ${hours}h ${minutes}m`;
+                } else {
+                    countdownElement.innerHTML = `<i class="fas fa-hourglass-end"></i> Next dose in ${minutes}m`;
+                }
+                
+                countdownElement.className = `medicine-countdown ${minutes < 30 ? 'countdown-urgent' : 'countdown-normal'}`;
+            } else {
+                countdownElement.innerHTML = `<i class="fas fa-check-circle"></i> All doses taken today`;
+                countdownElement.className = 'medicine-countdown countdown-complete';
+            }
+        }
+    });
+}
+
+// Update the reminder checking to be more precise
+function startReminderChecking() {
+    // Check every minute for due reminders
+    reminderInterval = setInterval(async () => {
+        if (currentUser) {
+            await checkDueReminders();
+            updateMedicineCountdowns(); // Update countdowns every minute
+        }
+    }, 60000); // Check every minute
+    
+    // Also check immediately and update countdowns
+    if (currentUser) {
+        setTimeout(() => {
+            checkDueReminders();
+            updateMedicineCountdowns();
+        }, 2000);
+    }
+    
+    // Update countdowns every 30 seconds for better accuracy
+    setInterval(() => {
+        if (currentUser) {
+            updateMedicineCountdowns();
+        }
+    }, 30000);
+}
