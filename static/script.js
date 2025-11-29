@@ -753,40 +753,60 @@ async function loadUpcomingReminders() {
         const data = await response.json();
         
         const remindersList = document.getElementById('reminders-list');
+        const upcomingRemindersList = document.getElementById('upcoming-reminders-list');
         
-        if (data.success && data.reminders.length > 0) {
-            remindersList.innerHTML = data.reminders.map(reminder => `
-                <div class="reminder-card">
-                    <div class="reminder-header">
-                        <span class="reminder-medicine">${reminder.medicine_name}</span>
-                        <span class="reminder-priority priority-${reminder.priority.toLowerCase()}">
-                            ${reminder.priority}
-                        </span>
-                    </div>
-                    <div class="reminder-dosage">
-                        <i class="fas fa-pills"></i> ${reminder.dosage}
-                    </div>
-                    ${reminder.instructions ? `
-                        <div class="reminder-instructions">
-                            <i class="fas fa-info-circle"></i> ${reminder.instructions}
-                        </div>
-                    ` : ''}
-                    <div class="reminder-time">
-                        <i class="fas fa-clock"></i> Next: ${reminder.next_reminder}
-                    </div>
-                    <div class="reminder-actions">
-                        <button class="btn btn-primary" onclick="logMedicineTaken(${reminder.medicine_id})">
-                            <i class="fas fa-check"></i> Mark Taken
-                        </button>
-                    </div>
+        const renderReminder = (reminder) => `
+            <div class="reminder-card ${reminder.is_urgent ? 'urgent' : ''}">
+                <div class="reminder-header">
+                    <span class="reminder-medicine">${reminder.medicine_name}</span>
+                    <span class="reminder-priority priority-${reminder.priority.toLowerCase()}">
+                        ${reminder.priority}
+                    </span>
                 </div>
-            `).join('');
-        } else {
-            remindersList.innerHTML = `
-                <div style="text-align: center; padding: 20px; color: #64748b;">
-                    <p>No upcoming reminders</p>
+                <div class="reminder-dosage">
+                    <i class="fas fa-pills"></i> ${reminder.dosage}
                 </div>
-            `;
+                ${reminder.instructions ? `
+                    <div class="reminder-instructions">
+                        <i class="fas fa-info-circle"></i> ${reminder.instructions}
+                    </div>
+                ` : ''}
+                <div class="reminder-time">
+                    <i class="fas fa-clock"></i> Next: ${reminder.next_reminder}
+                </div>
+                <div class="reminder-actions">
+                    <button class="btn btn-primary" onclick="logMedicineTaken(${reminder.medicine_id})">
+                        <i class="fas fa-check"></i> Mark Taken
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Update dashboard reminders
+        if (remindersList) {
+            if (data.success && data.reminders.length > 0) {
+                remindersList.innerHTML = data.reminders.slice(0, 3).map(renderReminder).join('');
+            } else {
+                remindersList.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: #64748b;">
+                        <p>No upcoming reminders</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Update upcoming reminders screen
+        if (upcomingRemindersList) {
+            if (data.success && data.reminders.length > 0) {
+                upcomingRemindersList.innerHTML = data.reminders.map(renderReminder).join('');
+            } else {
+                upcomingRemindersList.innerHTML = `
+                    <div style="text-align: center; padding: 40px 20px; color: #64748b;">
+                        <i class="fas fa-bell" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
+                        <p>No upcoming reminders</p>
+                    </div>
+                `;
+            }
         }
     } catch (error) {
         console.error('Failed to load reminders:', error);
@@ -1403,3 +1423,4 @@ function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
+
