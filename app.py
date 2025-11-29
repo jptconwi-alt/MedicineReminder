@@ -131,8 +131,63 @@ with app.app_context():
             import time
             time.sleep(2)
 
-# Routes
+# Utility functions
+def convert_to_12h(time_24h):
+    """Convert 24-hour time to 12-hour format"""
+    try:
+        hours, minutes = time_24h.split(':')
+        hours = int(hours)
+        am_pm = 'AM' if hours < 12 else 'PM'
+        hours_12 = hours % 12
+        if hours_12 == 0:
+            hours_12 = 12
+        return f"{hours_12}:{minutes} {am_pm}"
+    except:
+        return time_24h
 
+def convert_to_24h(time_12h):
+    """Convert 12-hour time to 24-hour format"""
+    try:
+        time_part, am_pm = time_12h.split(' ')
+        hours, minutes = time_part.split(':')
+        hours = int(hours)
+        
+        if am_pm.upper() == 'PM' and hours < 12:
+            hours += 12
+        elif am_pm.upper() == 'AM' and hours == 12:
+            hours = 0
+            
+        return f"{hours:02d}:{minutes}"
+    except:
+        return time_12h
+
+def is_time_matching(current_time, scheduled_time):
+    """Check if current time matches scheduled time (with 1-minute window)"""
+    try:
+        # Allow 1-minute window for matching
+        current_dt = datetime.strptime(current_time, '%H:%M')
+        scheduled_dt = datetime.strptime(scheduled_time, '%H:%M')
+        
+        time_diff = abs((current_dt - scheduled_dt).total_seconds())
+        return time_diff <= 60  # 1 minute window
+        
+    except ValueError:
+        return False
+
+def generate_default_times(times_per_day):
+    """Generate default times based on number of times per day"""
+    if times_per_day == 1:
+        return ["09:00"]
+    elif times_per_day == 2:
+        return ["08:00", "20:00"]
+    elif times_per_day == 3:
+        return ["08:00", "14:00", "20:00"]
+    elif times_per_day == 4:
+        return ["08:00", "12:00", "16:00", "20:00"]
+    else:
+        return ["09:00"]  # Default fallback
+
+# Scheduler for reminders
 scheduler = BackgroundScheduler()
 
 def check_medicine_reminders():
@@ -173,80 +228,6 @@ def check_medicine_reminders():
                         ).first()
                         
                         if not existing_notification:
-                            # Create notification
-                            notification = Notification(
-                                user_id=medicine.user_id,
-                                medicine_id=medicine.id,
-                                message=f'Time to take {medicine.medicine_name} - {medicine.dosage} at {scheduled_time}',
-                                type='reminder'
-                            )
-                            db.session.add(notification)
-                            print(f"✅ Created reminder for {medicine.medicine_name} at {scheduled_time}")
-            
-            db.session.commit()
-            
-        except Exception as e:
-            print(f"❌ Error checking reminders: {e}")
-
-def generate_default_times(times_per_day):
-    """Generate default times based on number of times per day"""
-    if times_per_day == 1:
-        return ["09:00"]
-    elif times_per_day == 2:
-        return ["08:00", "20:00"]
-    elif times_per_day == 3:
-        return ["08:00", "14:00", "20:00"]
-    elif times_per_day == 4:
-        return ["08:00", "12:00", "16:00", "20:00"]
-    else:
-        return ["09:00"]  # Default fallback
-
-def is_time_matching(current_time, scheduled_time):
-    """Check if current time exactly matches scheduled time"""
-    try:
-        # Exact minute matching for precise reminders
-        return current_time == scheduled_time
-    except ValueError:
-        return False
-
-def check_medicine_reminders():
-    """Check for due medicines and send notifications based on specific times"""
-    with app.app_context():
-        try:
-            current_time = datetime.utcnow()
-            current_time_str = current_time.strftime('%H:%M')
-            
-            print(f"🔔 Checking reminders at {current_time_str}")
-            
-            # Get all active medicines
-            active_medicines = Medicine.query.filter_by(status='Active').all()
-            
-            for medicine in active_medicines:
-                # Parse specific times if available
-                specific_times = []
-                if medicine.specific_times:
-                    try:
-                        specific_times = json.loads(medicine.specific_times)
-                    except:
-                        specific_times = []
-                
-                # If no specific times, use default times based on times_per_day
-                if not specific_times and medicine.times_per_day:
-                    specific_times = generate_default_times(medicine.times_per_day)
-                
-                # Check if current time matches any scheduled time exactly
-                for scheduled_time in specific_times:
-                    if is_time_matching(current_time_str, scheduled_time):
-                        # Check if we already notified for this medicine at this time today
-                        today = current_time.date()
-                        existing_notification = Notification.query.filter(
-                            Notification.user_id == medicine.user_id,
-                            Notification.medicine_id == medicine.id,
-                            db.func.date(Notification.created_at) == today,
-                            Notification.message.like(f'%{scheduled_time}%')
-                        ).first()
-                        
-                        if not existing_notification:
                             # Convert to 12-hour format for notification
                             scheduled_time_12h = convert_to_12h(scheduled_time)
                             
@@ -265,330 +246,29 @@ def check_medicine_reminders():
         except Exception as e:
             print(f"❌ Error checking reminders: {e}")
 
-def convert_to_12h(time_24h):
-    """Convert 24-hour time to 12-hour format"""
-    try:
-        hours, minutes = time_24h.split(':')
-        hours = int(hours)
-        am_pm = 'AM' if hours < 12 else 'PM'
-        hours_12 = hours % 12
-        if hours_12 == 0:
-            hours_12 = 12
-        return f"{hours_12}:{minutes} {am_pm}"
-    except:
-        return time_24h
+# Start the scheduler
+try:
+    scheduler.add_job(
+        func=check_medicine_reminders,
+        trigger='cron',
+        minute='*'  # Run every minute to check exact times
+    )
+    scheduler.start()
+    print("✅ Medicine reminder scheduler started (running every minute)")
+except Exception as e:
+    print(f"❌ Failed to start scheduler: {e}")
 
-# New API routes for notifications
+# Routes
 
-@app.route('/api/remove_medicine/<int:medicine_id>', methods=['DELETE'])
-def remove_medicine(medicine_id):
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Please login first!'})
-    
-    try:
-        medicine = Medicine.query.filter_by(
-            id=medicine_id, 
-            user_id=session['user_id']
-        ).first()
-        
-        if not medicine:
-            return jsonify({'success': False, 'message': 'Medicine not found!'})
-        
-        # Delete associated logs and notifications
-        MedicineLog.query.filter_by(medicine_id=medicine_id).delete()
-        Notification.query.filter_by(medicine_id=medicine_id).delete()
-        
-        # Delete the medicine
-        db.session.delete(medicine)
-        db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Medicine removed successfully!'})
-        
-    except Exception as e:
-        print(f"Error removing medicine: {e}")
-        db.session.rollback()
-        return jsonify({'success': False, 'message': 'Failed to remove medicine'})
-                
-@app.route('/api/user_notifications')
-def get_user_notifications():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not logged in'})
-    
-    notifications = Notification.query.filter_by(
-        user_id=session['user_id']
-    ).order_by(Notification.created_at.desc()).limit(20).all()
-    
-    notifications_data = []
-    for notification in notifications:
-        medicine = Medicine.query.get(notification.medicine_id) if notification.medicine_id else None
-        notification_data = {
-            'id': notification.id,
-            'message': notification.message,
-            'type': notification.type,
-            'is_read': notification.is_read,
-            'created_at': notification.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'medicine_name': medicine.medicine_name if medicine else None
-        }
-        notifications_data.append(notification_data)
-    
-    return jsonify({'success': True, 'notifications': notifications_data})
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-@app.route('/api/mark_notification_read/<int:notification_id>', methods=['POST'])
-def mark_notification_read(notification_id):
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not logged in'})
-    
-    try:
-        notification = Notification.query.get(notification_id)
-        if notification and notification.user_id == session['user_id']:
-            notification.is_read = True
-            db.session.commit()
-            return jsonify({'success': True, 'message': 'Notification marked as read'})
-        else:
-            return jsonify({'success': False, 'message': 'Notification not found'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': 'Error updating notification'})
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()})
 
-@app.route('/api/set_reminder_time', methods=['POST'])
-def set_reminder_time():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not logged in'})
-    
-    try:
-        data = request.get_json()
-        reminder_time = data.get('reminder_time', '09:00')  # Default to 9 AM
-        
-        # Store user's preferred reminder time (you might want to add this to User model)
-        # For now, we'll use session
-        session['reminder_time'] = reminder_time
-        
-        return jsonify({'success': True, 'message': f'Reminder time set to {reminder_time}'})
-    except Exception as e:
-        return jsonify({'success': False, 'message': 'Error setting reminder time'})
-
-@app.route('/api/add_medicine', methods=['POST'])
-def add_medicine():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Please login first!'})
-    
-    try:
-        data = request.get_json()
-        
-        # Handle specific times
-        specific_times = data.get('specific_times')
-        if specific_times and isinstance(specific_times, list):
-            specific_times = json.dumps(specific_times)
-        else:
-            specific_times = None
-        
-        medicine = Medicine(
-            user_id=session['user_id'],
-            medicine_name=data.get('medicine_name'),
-            dosage=data.get('dosage'),
-            frequency=data.get('frequency', 'daily'),
-            schedule_type=data.get('schedule_type', 'fixed'),
-            times_per_day=data.get('times_per_day', 1),
-            specific_times=specific_times,
-            start_date=data.get('start_date'),
-            end_date=data.get('end_date'),
-            instructions=data.get('instructions'),
-            priority=data.get('priority', 'Medium')
-        )
-        db.session.add(medicine)
-        db.session.commit()
-        
-        # Create notification
-        notification = Notification(
-            user_id=session['user_id'],
-            medicine_id=medicine.id,
-            message=f'Medicine "{medicine.medicine_name}" added successfully!',
-            type='medicine_added'
-        )
-        db.session.add(notification)
-        db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Medicine added successfully!'})
-    except Exception as e:
-        print(f"Error adding medicine: {e}")
-        return jsonify({'success': False, 'message': 'Failed to add medicine'})
-
-@app.route('/api/user_medicines')
-def get_user_medicines():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not logged in'})
-    
-    medicines = Medicine.query.filter_by(user_id=session['user_id']).order_by(Medicine.created_at.desc()).all()
-    medicines_data = []
-    for medicine in medicines:
-        # Get today's logs for this medicine
-        today = datetime.utcnow().date()
-        today_logs = MedicineLog.query.filter(
-            MedicineLog.medicine_id == medicine.id,
-            db.func.date(MedicineLog.taken_time) == today
-        ).all()
-        
-        medicine_data = {
-            'id': medicine.id,
-            'medicine_name': medicine.medicine_name,
-            'dosage': medicine.dosage,
-            'frequency': medicine.frequency,
-            'schedule_type': medicine.schedule_type,
-            'times_per_day': medicine.times_per_day,
-            'specific_times': medicine.specific_times,
-            'start_date': medicine.start_date,
-            'end_date': medicine.end_date,
-            'instructions': medicine.instructions,
-            'status': medicine.status,
-            'priority': medicine.priority,
-            'created_at': medicine.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-            'today_taken': len([log for log in today_logs if log.status == 'Taken']),
-            'today_missed': len([log for log in today_logs if log.status == 'Missed'])
-        }
-        medicines_data.append(medicine_data)
-    
-    return jsonify({'success': True, 'medicines': medicines_data})
-
-@app.route('/api/log_medicine', methods=['POST'])
-def log_medicine():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Please login first!'})
-    
-    try:
-        data = request.get_json()
-        medicine_log = MedicineLog(
-            user_id=session['user_id'],
-            medicine_id=data.get('medicine_id'),
-            scheduled_time=data.get('scheduled_time'),
-            status=data.get('status', 'Taken'),
-            notes=data.get('notes')
-        )
-        db.session.add(medicine_log)
-        db.session.commit()
-        
-        medicine = Medicine.query.get(data.get('medicine_id'))
-        if medicine:
-            notification = Notification(
-                user_id=session['user_id'],
-                medicine_id=medicine.id,
-                message=f'Medicine "{medicine.medicine_name}" marked as {data.get("status", "Taken")}',
-                type='medicine_taken'
-            )
-            db.session.add(notification)
-            db.session.commit()
-        
-        return jsonify({'success': True, 'message': 'Medicine logged successfully!'})
-    except Exception as e:
-        print(f"Error logging medicine: {e}")
-        return jsonify({'success': False, 'message': 'Failed to log medicine'})
-
-@app.route('/api/medicine_history')
-def get_medicine_history():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not logged in'})
-    
-    logs = MedicineLog.query.filter_by(user_id=session['user_id']).order_by(MedicineLog.taken_time.desc()).limit(50).all()
-    logs_data = []
-    for log in logs:
-        medicine = Medicine.query.get(log.medicine_id)
-        log_data = {
-            'id': log.id,
-            'medicine_name': medicine.medicine_name if medicine else 'Unknown',
-            'dosage': medicine.dosage if medicine else '',
-            'scheduled_time': log.scheduled_time,
-            'taken_time': log.taken_time.strftime('%Y-%m-%d %H:%M:%S'),
-            'status': log.status,
-            'notes': log.notes
-        }
-        logs_data.append(log_data)
-    
-    return jsonify({'success': True, 'history': logs_data})
-
-@app.route('/api/stats')
-def get_stats():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not logged in'})
-    
-    user_id = session['user_id']
-    role = session.get('role', 'user')
-    
-    if role == 'admin':
-        total_medicines = Medicine.query.count()
-        active_medicines = Medicine.query.filter_by(status='Active').count()
-        total_users = User.query.count()
-        
-        # Today's stats
-        today = datetime.utcnow().date()
-        today_taken = MedicineLog.query.filter(
-            db.func.date(MedicineLog.taken_time) == today,
-            MedicineLog.status == 'Taken'
-        ).count()
-        today_missed = MedicineLog.query.filter(
-            db.func.date(MedicineLog.taken_time) == today,
-            MedicineLog.status == 'Missed'
-        ).count()
-        
-        stats = {
-            'total_medicines': total_medicines,
-            'active_medicines': active_medicines,
-            'total_users': total_users,
-            'today_taken': today_taken,
-            'today_missed': today_missed
-        }
-    else:
-        my_medicines = Medicine.query.filter_by(user_id=user_id).count()
-        active_medicines = Medicine.query.filter_by(user_id=user_id, status='Active').count()
-        
-        # Today's personal stats
-        today = datetime.utcnow().date()
-        today_taken = MedicineLog.query.filter(
-            MedicineLog.user_id == user_id,
-            db.func.date(MedicineLog.taken_time) == today,
-            MedicineLog.status == 'Taken'
-        ).count()
-        today_missed = MedicineLog.query.filter(
-            MedicineLog.user_id == user_id,
-            db.func.date(MedicineLog.taken_time) == today,
-            MedicineLog.status == 'Missed'
-        ).count()
-        
-        stats = {
-            'my_medicines': my_medicines,
-            'active_medicines': active_medicines,
-            'today_taken': today_taken,
-            'today_missed': today_missed
-        }
-    
-    return jsonify({'success': True, 'stats': stats})
-
-@app.route('/api/upcoming_reminders')
-def get_upcoming_reminders():
-    if 'user_id' not in session:
-        return jsonify({'success': False, 'message': 'Not logged in'})
-    
-    # Get active medicines for the user
-    active_medicines = Medicine.query.filter_by(
-        user_id=session['user_id'], 
-        status='Active'
-    ).all()
-    
-    reminders = []
-    current_time = datetime.utcnow()
-    
-    for medicine in active_medicines:
-        # Simple reminder logic - you can enhance this based on schedule_type and specific_times
-        reminder = {
-            'medicine_id': medicine.id,
-            'medicine_name': medicine.medicine_name,
-            'dosage': medicine.dosage,
-            'instructions': medicine.instructions,
-            'priority': medicine.priority,
-            'next_reminder': 'Soon'  # You can implement more sophisticated scheduling
-        }
-        reminders.append(reminder)
-    
-    return jsonify({'success': True, 'reminders': reminders})
-
-# Authentication routes (same as community care)
+# Authentication routes
 @app.route('/api/login', methods=['POST'])
 def login():
     try:
@@ -700,16 +380,371 @@ def logout():
     session.clear()
     return jsonify({'success': True, 'message': 'Logged out successfully!'})
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+# Medicine routes
+@app.route('/api/add_medicine', methods=['POST'])
+def add_medicine():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Please login first!'})
+    
+    try:
+        data = request.get_json()
+        
+        # Handle specific times - convert from 12-hour to 24-hour format
+        specific_times = data.get('specific_times')
+        if specific_times and isinstance(specific_times, list):
+            # Convert each time from 12-hour to 24-hour format
+            converted_times = []
+            for time_str in specific_times:
+                try:
+                    # If it's already in 24-hour format, use as is
+                    if ':' in time_str and ('AM' in time_str.upper() or 'PM' in time_str.upper()):
+                        converted_times.append(convert_to_24h(time_str))
+                    else:
+                        converted_times.append(time_str)  # Assume it's already 24-hour
+                except:
+                    converted_times.append(time_str)  # Fallback
+            specific_times = json.dumps(converted_times)
+        else:
+            specific_times = None
+        
+        medicine = Medicine(
+            user_id=session['user_id'],
+            medicine_name=data.get('medicine_name'),
+            dosage=data.get('dosage'),
+            frequency=data.get('frequency', 'daily'),
+            schedule_type=data.get('schedule_type', 'fixed'),
+            times_per_day=data.get('times_per_day', 1),
+            specific_times=specific_times,
+            start_date=data.get('start_date'),
+            end_date=data.get('end_date'),
+            instructions=data.get('instructions'),
+            priority=data.get('priority', 'Medium')
+        )
+        db.session.add(medicine)
+        db.session.commit()
+        
+        # Create notification
+        notification = Notification(
+            user_id=session['user_id'],
+            medicine_id=medicine.id,
+            message=f'Medicine "{medicine.medicine_name}" added successfully!',
+            type='medicine_added'
+        )
+        db.session.add(notification)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Medicine added successfully!'})
+    except Exception as e:
+        print(f"Error adding medicine: {e}")
+        return jsonify({'success': False, 'message': 'Failed to add medicine'})
 
-@app.route('/health')
-def health_check():
-    return jsonify({'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()})
+@app.route('/api/remove_medicine/<int:medicine_id>', methods=['DELETE'])
+def remove_medicine(medicine_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Please login first!'})
+    
+    try:
+        medicine = Medicine.query.filter_by(
+            id=medicine_id, 
+            user_id=session['user_id']
+        ).first()
+        
+        if not medicine:
+            return jsonify({'success': False, 'message': 'Medicine not found!'})
+        
+        # Delete associated logs and notifications
+        MedicineLog.query.filter_by(medicine_id=medicine_id).delete()
+        Notification.query.filter_by(medicine_id=medicine_id).delete()
+        
+        # Delete the medicine
+        db.session.delete(medicine)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Medicine removed successfully!'})
+        
+    except Exception as e:
+        print(f"Error removing medicine: {e}")
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Failed to remove medicine'})
+
+@app.route('/api/user_medicines')
+def get_user_medicines():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    medicines = Medicine.query.filter_by(user_id=session['user_id']).order_by(Medicine.created_at.desc()).all()
+    medicines_data = []
+    for medicine in medicines:
+        # Get today's logs for this medicine
+        today = datetime.utcnow().date()
+        today_logs = MedicineLog.query.filter(
+            MedicineLog.medicine_id == medicine.id,
+            db.func.date(MedicineLog.taken_time) == today
+        ).all()
+        
+        # Convert specific times to 12-hour format for display
+        specific_times_display = []
+        if medicine.specific_times:
+            try:
+                times_24h = json.loads(medicine.specific_times)
+                specific_times_display = [convert_to_12h(time) for time in times_24h]
+            except:
+                specific_times_display = [medicine.specific_times]
+        
+        medicine_data = {
+            'id': medicine.id,
+            'medicine_name': medicine.medicine_name,
+            'dosage': medicine.dosage,
+            'frequency': medicine.frequency,
+            'schedule_type': medicine.schedule_type,
+            'times_per_day': medicine.times_per_day,
+            'specific_times': json.dumps(specific_times_display),  # Send as 12-hour format
+            'start_date': medicine.start_date,
+            'end_date': medicine.end_date,
+            'instructions': medicine.instructions,
+            'status': medicine.status,
+            'priority': medicine.priority,
+            'created_at': medicine.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'today_taken': len([log for log in today_logs if log.status == 'Taken']),
+            'today_missed': len([log for log in today_logs if log.status == 'Missed'])
+        }
+        medicines_data.append(medicine_data)
+    
+    return jsonify({'success': True, 'medicines': medicines_data})
+
+@app.route('/api/log_medicine', methods=['POST'])
+def log_medicine():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Please login first!'})
+    
+    try:
+        data = request.get_json()
+        medicine_log = MedicineLog(
+            user_id=session['user_id'],
+            medicine_id=data.get('medicine_id'),
+            scheduled_time=data.get('scheduled_time'),
+            status=data.get('status', 'Taken'),
+            notes=data.get('notes')
+        )
+        db.session.add(medicine_log)
+        db.session.commit()
+        
+        medicine = Medicine.query.get(data.get('medicine_id'))
+        if medicine:
+            notification = Notification(
+                user_id=session['user_id'],
+                medicine_id=medicine.id,
+                message=f'Medicine "{medicine.medicine_name}" marked as {data.get("status", "Taken")}',
+                type='medicine_taken'
+            )
+            db.session.add(notification)
+            db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Medicine logged successfully!'})
+    except Exception as e:
+        print(f"Error logging medicine: {e}")
+        return jsonify({'success': False, 'message': 'Failed to log medicine'})
+
+@app.route('/api/medicine_history')
+def get_medicine_history():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    logs = MedicineLog.query.filter_by(user_id=session['user_id']).order_by(MedicineLog.taken_time.desc()).limit(50).all()
+    logs_data = []
+    for log in logs:
+        medicine = Medicine.query.get(log.medicine_id)
+        log_data = {
+            'id': log.id,
+            'medicine_name': medicine.medicine_name if medicine else 'Unknown',
+            'dosage': medicine.dosage if medicine else '',
+            'scheduled_time': log.scheduled_time,
+            'taken_time': log.taken_time.strftime('%Y-%m-%d %H:%M:%S'),
+            'status': log.status,
+            'notes': log.notes
+        }
+        logs_data.append(log_data)
+    
+    return jsonify({'success': True, 'history': logs_data})
+
+# Stats and reminders
+@app.route('/api/stats')
+def get_stats():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    user_id = session['user_id']
+    role = session.get('role', 'user')
+    
+    if role == 'admin':
+        total_medicines = Medicine.query.count()
+        active_medicines = Medicine.query.filter_by(status='Active').count()
+        total_users = User.query.count()
+        
+        # Today's stats
+        today = datetime.utcnow().date()
+        today_taken = MedicineLog.query.filter(
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Taken'
+        ).count()
+        today_missed = MedicineLog.query.filter(
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Missed'
+        ).count()
+        
+        stats = {
+            'total_medicines': total_medicines,
+            'active_medicines': active_medicines,
+            'total_users': total_users,
+            'today_taken': today_taken,
+            'today_missed': today_missed
+        }
+    else:
+        my_medicines = Medicine.query.filter_by(user_id=user_id).count()
+        active_medicines = Medicine.query.filter_by(user_id=user_id, status='Active').count()
+        
+        # Today's personal stats
+        today = datetime.utcnow().date()
+        today_taken = MedicineLog.query.filter(
+            MedicineLog.user_id == user_id,
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Taken'
+        ).count()
+        today_missed = MedicineLog.query.filter(
+            MedicineLog.user_id == user_id,
+            db.func.date(MedicineLog.taken_time) == today,
+            MedicineLog.status == 'Missed'
+        ).count()
+        
+        stats = {
+            'my_medicines': my_medicines,
+            'active_medicines': active_medicines,
+            'today_taken': today_taken,
+            'today_missed': today_missed
+        }
+    
+    return jsonify({'success': True, 'stats': stats})
+
+@app.route('/api/upcoming_reminders')
+def get_upcoming_reminders():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    # Get active medicines for the user
+    active_medicines = Medicine.query.filter_by(
+        user_id=session['user_id'], 
+        status='Active'
+    ).all()
+    
+    reminders = []
+    current_time = datetime.utcnow()
+    
+    for medicine in active_medicines:
+        # Parse specific times
+        specific_times = []
+        if medicine.specific_times:
+            try:
+                specific_times = json.loads(medicine.specific_times)
+            except:
+                specific_times = []
+        
+        # Convert times to 12-hour format and find next reminder
+        for time_24h in specific_times:
+            time_12h = convert_to_12h(time_24h)
+            
+            # Calculate if this is an upcoming reminder (within next 24 hours)
+            try:
+                reminder_time = datetime.strptime(time_24h, '%H:%M').time()
+                reminder_datetime = datetime.combine(current_time.date(), reminder_time)
+                
+                # If time has passed today, schedule for tomorrow
+                if reminder_datetime < current_time:
+                    reminder_datetime = reminder_datetime.replace(day=reminder_datetime.day + 1)
+                
+                time_until_reminder = reminder_datetime - current_time
+                hours_until = time_until_reminder.total_seconds() / 3600
+                
+                # Only show reminders in the next 24 hours
+                if hours_until <= 24:
+                    reminder = {
+                        'medicine_id': medicine.id,
+                        'medicine_name': medicine.medicine_name,
+                        'dosage': medicine.dosage,
+                        'instructions': medicine.instructions,
+                        'priority': medicine.priority,
+                        'next_reminder': f"Today at {time_12h}" if hours_until < 24 else f"Tomorrow at {time_12h}",
+                        'is_urgent': medicine.priority in ['High', 'Critical'] or hours_until < 1
+                    }
+                    reminders.append(reminder)
+            except Exception as e:
+                print(f"Error processing time {time_24h}: {e}")
+                continue
+    
+    # Sort by urgency and time
+    priority_order = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3}
+    reminders.sort(key=lambda x: (priority_order.get(x['priority'], 4), x['is_urgent']))
+    
+    return jsonify({'success': True, 'reminders': reminders})
+
+# Notification routes
+@app.route('/api/user_notifications')
+def get_user_notifications():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    notifications = Notification.query.filter_by(
+        user_id=session['user_id']
+    ).order_by(Notification.created_at.desc()).limit(20).all()
+    
+    notifications_data = []
+    for notification in notifications:
+        medicine = Medicine.query.get(notification.medicine_id) if notification.medicine_id else None
+        notification_data = {
+            'id': notification.id,
+            'message': notification.message,
+            'type': notification.type,
+            'is_read': notification.is_read,
+            'created_at': notification.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+            'medicine_id': notification.medicine_id,
+            'medicine_name': medicine.medicine_name if medicine else None
+        }
+        notifications_data.append(notification_data)
+    
+    return jsonify({'success': True, 'notifications': notifications_data})
+
+@app.route('/api/mark_notification_read/<int:notification_id>', methods=['POST'])
+def mark_notification_read(notification_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    try:
+        notification = Notification.query.get(notification_id)
+        if notification and notification.user_id == session['user_id']:
+            notification.is_read = True
+            db.session.commit()
+            return jsonify({'success': True, 'message': 'Notification marked as read'})
+        else:
+            return jsonify({'success': False, 'message': 'Notification not found'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error updating notification'})
+
+@app.route('/api/set_reminder_time', methods=['POST'])
+def set_reminder_time():
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    try:
+        data = request.get_json()
+        reminder_time = data.get('reminder_time', '09:00')  # Default to 9 AM
+        
+        # Store user's preferred reminder time (you might want to add this to User model)
+        # For now, we'll use session
+        session['reminder_time'] = reminder_time
+        
+        return jsonify({'success': True, 'message': f'Reminder time set to {reminder_time}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error setting reminder time'})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
-
