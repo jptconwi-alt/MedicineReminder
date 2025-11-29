@@ -1197,3 +1197,74 @@ body {
 .notifications-container::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
 }
+
+/* Medicine Countdown Styles */
+.medicine-countdown {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin: var(--space-sm) 0;
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+    font-weight: 500;
+}
+
+.countdown-normal {
+    background: #f0f9ff;
+    color: #0369a1;
+    border-left: 3px solid #0369a1;
+}
+
+.countdown-urgent {
+    background: #fef2f2;
+    color: #dc2626;
+    border-left: 3px solid #dc2626;
+    animation: pulse 2s infinite;
+}
+
+.countdown-complete {
+    background: #f0fdf4;
+    color: #16a34a;
+    border-left: 3px solid #16a34a;
+}
+
+.medicine-countdown i {
+    font-size: var(--text-base);
+}
+
+/* Enhanced alarm sound styles */
+.alarm-sound-indicator {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    margin-top: var(--space-sm);
+    padding: var(--space-sm);
+    background: var(--background-color);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-sm);
+}
+
+.sound-wave {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.sound-bar {
+    width: 3px;
+    background: var(--primary-color);
+    border-radius: 2px;
+    animation: soundWave 1s ease-in-out infinite;
+}
+
+.sound-bar:nth-child(2) { animation-delay: 0.1s; }
+.sound-bar:nth-child(3) { animation-delay: 0.2s; }
+.sound-bar:nth-child(4) { animation-delay: 0.3s; }
+.sound-bar:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes soundWave {
+    0%, 100% { height: 5px; }
+    50% { height: 15px; }
+}
+
