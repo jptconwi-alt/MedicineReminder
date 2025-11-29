@@ -279,6 +279,36 @@ def convert_to_12h(time_24h):
         return time_24h
 
 # New API routes for notifications
+
+@app.route('/api/remove_medicine/<int:medicine_id>', methods=['DELETE'])
+def remove_medicine(medicine_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Please login first!'})
+    
+    try:
+        medicine = Medicine.query.filter_by(
+            id=medicine_id, 
+            user_id=session['user_id']
+        ).first()
+        
+        if not medicine:
+            return jsonify({'success': False, 'message': 'Medicine not found!'})
+        
+        # Delete associated logs and notifications
+        MedicineLog.query.filter_by(medicine_id=medicine_id).delete()
+        Notification.query.filter_by(medicine_id=medicine_id).delete()
+        
+        # Delete the medicine
+        db.session.delete(medicine)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Medicine removed successfully!'})
+        
+    except Exception as e:
+        print(f"Error removing medicine: {e}")
+        db.session.rollback()
+        return jsonify({'success': False, 'message': 'Failed to remove medicine'})
+                
 @app.route('/api/user_notifications')
 def get_user_notifications():
     if 'user_id' not in session:
@@ -681,4 +711,5 @@ def health_check():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
 
