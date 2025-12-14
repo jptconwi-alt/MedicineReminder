@@ -432,20 +432,31 @@ async function handleMedicineSubmit(e) {
     
     // Handle specific times - convert 12-hour to 24-hour for storage
     let specific_times = null;
-    if (specificTimesInput) {
-        const timesArray = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
-        specific_times = [];
-        
-        // Validate and convert each time
-        for (let time of timesArray) {
-            if (!isValidTimeFormat12H(time)) {
-                showSnackbar(`Invalid time format: ${time}. Use HH:MM AM/PM format (e.g., 08:00 AM, 02:00 PM, 08:00 PM)`, 'error');
-                return;
-            }
-            // Convert to 24-hour format for storage
-            specific_times.push(convertTo24Hour(time));
+    // Update the time validation section
+if (specificTimesInput) {
+    const timesArray = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
+    specific_times = [];
+    
+    // Validate and convert each time
+    for (let time of timesArray) {
+        // Enhanced validation
+        if (!isValidTimeFormat(time)) {
+            showSnackbar(`Invalid time format: ${time}. Use formats like: 8:00 AM, 08:00 AM, 2:00 PM, 14:00`, 'error');
+            return;
         }
+        // Convert to 24-hour format for storage
+        specific_times.push(convertTo24Hour(time));
     }
+}
+
+// Add new validation function
+function isValidTimeFormat(time) {
+    // Accepts: 8:00 AM, 08:00 AM, 2:00 PM, 14:00
+    const timeRegex12 = /^(0?[1-9]|1[0-2]):[0-5][0-9]\s*(AM|PM)$/i;
+    const timeRegex24 = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    
+    return timeRegex12.test(time) || timeRegex24.test(time);
+}
     
     try {
         // Show loading state
@@ -1270,5 +1281,6 @@ function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
+
 
 
