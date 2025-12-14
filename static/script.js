@@ -12,6 +12,16 @@ document.addEventListener('DOMContentLoaded', function() {
     if (startDateField) {
         startDateField.valueAsDate = new Date();
     }
+    // Add to the end of DOMContentLoaded event listener
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+        .then(registration => {
+            console.log('Service Worker registered:', registration);
+        })
+        .catch(error => {
+            console.log('Service Worker registration failed:', error);
+        });
+}
     
     // Initialize notification sound
     initializeNotificationSound();
@@ -1256,3 +1266,4 @@ function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
+
