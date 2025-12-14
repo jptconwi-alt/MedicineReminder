@@ -9,6 +9,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    
 </head>
 <body>
     <div id="app">
@@ -298,10 +299,16 @@
         </div>
     </div>
 
+    <!-- Ringtone Audio Element -->
+    <audio id="hyunjin-ringtone" preload="auto" loop>
+        <source src="{{ url_for('static', filename='audio/hyunjin_ringtone.mp3') }}" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
     <!-- Snackbar for notifications -->
     <div id="snackbar" class="snackbar hidden"></div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+
 </body>
 </html>
-
