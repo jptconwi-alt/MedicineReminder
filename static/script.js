@@ -1047,6 +1047,7 @@ async function loadMedicineHistory() {
 }
 
 // Add countdown display function
+// Update the updateMedicineCountdowns function
 function updateMedicineCountdowns() {
     const medicineCards = document.querySelectorAll('.medicine-card');
     
@@ -1062,7 +1063,16 @@ function updateMedicineCountdowns() {
             let minDiff = Infinity;
             
             times.forEach(time12 => {
-                const time24 = convertTo24Hour(time12);
+                // Check if it's already in 12-hour format
+                let time24;
+                if (time12.includes('AM') || time12.includes('PM')) {
+                    // It's in 12-hour format, convert to 24-hour
+                    time24 = convertTo24Hour(time12);
+                } else {
+                    // Assume it's already in 24-hour format
+                    time24 = time12;
+                }
+                
                 const [hours, minutes] = time24.split(':');
                 const targetTime = new Date();
                 targetTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
@@ -1263,6 +1273,7 @@ function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
+
 
 
 
