@@ -23,6 +23,13 @@ app = Flask(__name__,
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-2024')
 CORS(app)
 
+app.config.update(
+    SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=24)
+)
+
 # Database configuration
 DATABASE_URL = os.environ.get('DATABASE_URL', 'postgresql://medicine_reminder_db_ydwd_user:MA8YcIJ9c23KnnMaArYbFSfRfA5qYwpd@dpg-d4i9106r433s73c98mv0-a/medicine_reminder_db_ydwd')
 
@@ -759,5 +766,8 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({'success': False, 'message': 'Internal server error'}), 500
+
+
+
 
 
