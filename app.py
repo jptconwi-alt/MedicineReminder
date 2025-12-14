@@ -21,7 +21,15 @@ app = Flask(__name__,
             template_folder='templates')
 
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-2024')
-CORS(app)
+
+
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["*"],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
 
 app.config.update(
     SESSION_COOKIE_SECURE=False,  # Set to True in production with HTTPS
@@ -766,6 +774,7 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({'success': False, 'message': 'Internal server error'}), 500
+
 
 
 
