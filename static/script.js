@@ -1006,9 +1006,66 @@ async function markNotificationAsRead(notificationId) {
     }
 }
 
+// Update the showNotificationsScreen function
 function showNotificationsScreen() {
-    // You can implement a notifications screen here
-    showSnackbar('Notifications feature coming soon!', 'info');
+    loadNotifications();
+}
+
+async function loadNotifications() {
+    try {
+        const response = await fetch('/api/user_notifications');
+        const data = await response.json();
+        
+        if (data.success && data.notifications.length > 0) {
+            // Create notifications modal
+            showNotificationsModal(data.notifications);
+        } else {
+            showSnackbar('No notifications', 'info');
+        }
+    } catch (error) {
+        console.error('Failed to load notifications:', error);
+    }
+}
+
+function showNotificationsModal(notifications) {
+    const modal = document.createElement('div');
+    modal.className = 'alarm-modal';
+    modal.innerHTML = `
+        <div class="alarm-content">
+            <div class="alarm-header">
+                <h3><i class="fas fa-bell"></i> Notifications</h3>
+            </div>
+            <div class="notifications-container">
+                ${notifications.map(notification => `
+                    <div class="notification-card ${notification.is_read ? 'read' : 'unread'}">
+                        <div class="notification-header">
+                            <div class="notification-message">${notification.message}</div>
+                            <div class="notification-time">${notification.created_at}</div>
+                        </div>
+                        <div class="notification-actions">
+                            <button class="btn btn-sm btn-primary" onclick="markNotificationAsRead(${notification.id})">
+                                <i class="fas fa-check"></i> Mark Read
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="alarm-actions">
+                <button class="btn btn-secondary" onclick="closeModal(this)">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+function closeModal(button) {
+    const modal = button.closest('.alarm-modal');
+    if (modal) {
+        modal.remove();
+    }
 }
 
 function showMedicineHistory() {
@@ -1281,6 +1338,7 @@ function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
+
 
 
 
