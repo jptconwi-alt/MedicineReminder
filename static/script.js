@@ -1065,6 +1065,7 @@ function updateMedicineCountdowns() {
             
             times.forEach(time12 => {
                 // Check if it's already in 12-hour format
+                time12 = cleanTimeString(time12);
                 let time24;
                 if (time12.includes('AM') || time12.includes('PM')) {
                     // It's in 12-hour format, convert to 24-hour
@@ -1303,6 +1304,7 @@ function cleanTimeString(timeString) {
     
     return cleaned;
 }
+
 
 
 
