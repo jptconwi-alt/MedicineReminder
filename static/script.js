@@ -543,10 +543,18 @@ function validateMedicineForm() {
 }
 
 // Add these utility functions for time conversion
+// Update the convertTo12Hour function in script.js
 function convertTo12Hour(time24) {
     if (!time24) return '';
     
     try {
+        // Check if the time already has AM/PM (already in 12-hour format)
+        if (time24.includes('AM') || time24.includes('PM')) {
+            // It's already in 12-hour format, just return as-is
+            return time24;
+        }
+        
+        // Otherwise, convert from 24-hour to 12-hour
         const [hours, minutes] = time24.split(':');
         const hour = parseInt(hours);
         const ampm = hour >= 12 ? 'PM' : 'AM';
@@ -1338,6 +1346,7 @@ function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
+
 
 
 
