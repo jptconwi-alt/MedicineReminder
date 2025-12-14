@@ -55,12 +55,18 @@ function initializeNotificationSound() {
 // Play the hyunjin ringtone for alarms
 function playAlarmSound() {
     if (!notificationSound || notificationSound === 'fallback') {
-        // Fallback to the old method
         playFallbackAlarmSound();
         return;
     }
 
     try {
+        // Check if audio element exists and has valid source
+        if (!notificationSound || !notificationSound.src || notificationSound.src.includes('undefined')) {
+            console.warn('🔇 Invalid audio source, using fallback');
+            playFallbackAlarmSound();
+            return;
+        }
+        
         // Stop any currently playing ringtone
         if (!notificationSound.paused) {
             notificationSound.pause();
@@ -68,23 +74,21 @@ function playAlarmSound() {
         }
         
         // Play the hyunjin ringtone
-        notificationSound.loop = true; // Loop until dismissed
-        notificationSound.volume = 0.7; // Set volume (0.0 to 1.0)
+        notificationSound.loop = true;
+        notificationSound.volume = 0.7;
         
         const playPromise = notificationSound.play();
         
         if (playPromise !== undefined) {
             playPromise.catch(error => {
                 console.warn('Could not play ringtone:', error);
-                // Fallback to beep sound
                 playFallbackAlarmSound();
             });
         }
         
-        console.log('🔔 Playing hyunjin ringtone for alarm');
+        console.log('🔔 Playing ringtone for alarm');
     } catch (error) {
         console.warn('Could not play ringtone:', error);
-        // Fallback to beep sound
         playFallbackAlarmSound();
     }
 }
@@ -1266,4 +1270,5 @@ function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
+
 
