@@ -1,4 +1,4 @@
-// Global variables
+
 let currentUser = null;
 let notificationSound = null;
 let reminderInterval = null;
@@ -24,46 +24,119 @@ document.addEventListener('DOMContentLoaded', function() {
     startReminderChecking();
 });
 
-// Initialize notification sound
+// Initialize notification sound with ringtone
 function initializeNotificationSound() {
     try {
-        // Create a simple beep sound using Web Audio API
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        notificationSound = audioContext;
-        console.log('🔊 Notification sound initialized');
+        // Initialize the ringtone audio
+        const ringtone = document.getElementById('hyunjin-ringtone');
+        if (ringtone) {
+            notificationSound = ringtone;
+            console.log('🔊 Ringtone initialized:', notificationSound.src);
+        } else {
+            console.warn('🔇 Ringtone element not found');
+            notificationSound = 'fallback';
+        }
     } catch (error) {
-        console.warn('🔇 Web Audio API not supported, using fallback');
+        console.warn('🔇 Audio initialization failed, using fallback');
         notificationSound = 'fallback';
     }
 }
 
-// Play notification sound
-function playNotificationSound() {
-    if (!notificationSound) return;
-    
+// Play the hyunjin ringtone for alarms
+function playAlarmSound() {
+    if (!notificationSound || notificationSound === 'fallback') {
+        // Fallback to the old method
+        playFallbackAlarmSound();
+        return;
+    }
+
     try {
-        if (notificationSound === 'fallback') {
-            // Fallback: Use browser's built-in beep
-            console.log('\x07'); // ASCII bell character
-        } else {
-            // Web Audio API beep
+        // Stop any currently playing ringtone
+        if (!notificationSound.paused) {
+            notificationSound.pause();
+            notificationSound.currentTime = 0;
+        }
+        
+        // Play the hyunjin ringtone
+        notificationSound.loop = true; // Loop until dismissed
+        notificationSound.volume = 0.7; // Set volume (0.0 to 1.0)
+        
+        const playPromise = notificationSound.play();
+        
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.warn('Could not play ringtone:', error);
+                // Fallback to beep sound
+                playFallbackAlarmSound();
+            });
+        }
+        
+        console.log('🔔 Playing hyunjin ringtone for alarm');
+    } catch (error) {
+        console.warn('Could not play ringtone:', error);
+        // Fallback to beep sound
+        playFallbackAlarmSound();
+    }
+}
+
+// Fallback alarm sound (original function)
+function playFallbackAlarmSound() {
+    if (!notificationSound || notificationSound === 'fallback') {
+        // More noticeable fallback sound - multiple beeps
+        for (let i = 0; i < 5; i++) {
+            setTimeout(() => {
+                console.log('\x07'); // ASCII bell
+                // Also try HTML5 audio fallback
+                try {
+                    const audio = new Audio("data:audio/wav;base64,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qJrx4KOQakahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");
+                    audio.volume = 0.3;
+                    audio.play().catch(e => console.log('Audio play failed:', e));
+                } catch (audioError) {
+                    console.log('HTML5 audio failed');
+                }
+            }, i * 600);
+        }
+    } else {
+        // More urgent and repeating Web Audio API alarm
+        const playBeep = (startTime, frequency) => {
             const oscillator = notificationSound.createOscillator();
             const gainNode = notificationSound.createGain();
             
             oscillator.connect(gainNode);
             gainNode.connect(notificationSound.destination);
             
-            oscillator.frequency.value = 800;
+            oscillator.frequency.value = frequency;
             oscillator.type = 'sine';
             
-            gainNode.gain.setValueAtTime(0.3, notificationSound.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, notificationSound.currentTime + 1);
+            // Sharp attack, quick decay
+            gainNode.gain.setValueAtTime(0, startTime);
+            gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.1);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
             
-            oscillator.start(notificationSound.currentTime);
-            oscillator.stop(notificationSound.currentTime + 1);
+            oscillator.start(startTime);
+            oscillator.stop(startTime + 0.3);
+        };
+        
+        const currentTime = notificationSound.currentTime;
+        
+        // Play multiple beeps with different frequencies
+        playBeep(currentTime, 1000);
+        playBeep(currentTime + 0.4, 1200);
+        playBeep(currentTime + 0.8, 1000);
+        playBeep(currentTime + 1.2, 800);
+    }
+}
+
+// Stop the ringtone when alarm is dismissed
+function stopAlarmSound() {
+    if (notificationSound && notificationSound !== 'fallback' && !notificationSound.paused) {
+        try {
+            notificationSound.pause();
+            notificationSound.currentTime = 0;
+            console.log('🔕 Ringtone stopped');
+        } catch (error) {
+            console.warn('Could not stop ringtone:', error);
         }
-    } catch (error) {
-        console.warn('Could not play notification sound:', error);
     }
 }
 
@@ -73,13 +146,24 @@ function startReminderChecking() {
     reminderInterval = setInterval(async () => {
         if (currentUser) {
             await checkDueReminders();
+            updateMedicineCountdowns(); // Update countdowns every minute
         }
     }, 30000); // Check every 30 seconds
     
     // Also check immediately
     if (currentUser) {
-        setTimeout(() => checkDueReminders(), 2000);
+        setTimeout(() => {
+            checkDueReminders();
+            updateMedicineCountdowns();
+        }, 2000);
     }
+    
+    // Update countdowns every 30 seconds for better accuracy
+    setInterval(() => {
+        if (currentUser) {
+            updateMedicineCountdowns();
+        }
+    }, 30000);
 }
 
 // Check for due reminders
@@ -134,60 +218,6 @@ function showMedicineAlarm(notification) {
     showAlarmModal(notification);
 }
 
-// Enhanced alarm sound function
-function playAlarmSound() {
-    if (!notificationSound) return;
-    
-    try {
-        if (notificationSound === 'fallback') {
-            // More noticeable fallback sound - multiple beeps
-            for (let i = 0; i < 5; i++) {
-                setTimeout(() => {
-                    console.log('\x07'); // ASCII bell
-                    // Also try HTML5 audio fallback
-                    try {
-                        const audio = new Audio("data:audio/wav;base64,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qJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");
-                        audio.volume = 0.3;
-                        audio.play().catch(e => console.log('Audio play failed:', e));
-                    } catch (audioError) {
-                        console.log('HTML5 audio failed');
-                    }
-                }, i * 600);
-            }
-        } else {
-            // More urgent and repeating Web Audio API alarm
-            const playBeep = (startTime, frequency) => {
-                const oscillator = notificationSound.createOscillator();
-                const gainNode = notificationSound.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(notificationSound.destination);
-                
-                oscillator.frequency.value = frequency;
-                oscillator.type = 'sine';
-                
-                // Sharp attack, quick decay
-                gainNode.gain.setValueAtTime(0, startTime);
-                gainNode.gain.linearRampToValueAtTime(0.3, startTime + 0.1);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
-                
-                oscillator.start(startTime);
-                oscillator.stop(startTime + 0.3);
-            };
-            
-            const currentTime = notificationSound.currentTime;
-            
-            // Play multiple beeps with different frequencies
-            playBeep(currentTime, 1000);
-            playBeep(currentTime + 0.4, 1200);
-            playBeep(currentTime + 0.8, 1000);
-            playBeep(currentTime + 1.2, 800);
-        }
-    } catch (error) {
-        console.warn('Could not play alarm sound:', error);
-    }
-}
-
 // Alarm modal function
 function showAlarmModal(notification) {
     // Remove existing alarm modal if any
@@ -202,12 +232,19 @@ function showAlarmModal(notification) {
     modal.innerHTML = `
         <div class="alarm-content">
             <div class="alarm-header">
-                <i class="fas fa-bell alarm-icon"></i>
+                <i class="fas fa-music alarm-icon"></i>
                 <h3>💊 Medicine Reminder</h3>
             </div>
             <div class="alarm-message">
                 <p>${notification.message}</p>
                 <p class="alarm-time">${new Date().toLocaleTimeString()}</p>
+            </div>
+            <div class="ringtone-indicator">
+                <i class="fas fa-volume-up"></i>
+                <span>Playing hyunjin ringtone...</span>
+                <div class="sound-wave">
+                    <span></span><span></span><span></span><span></span><span></span>
+                </div>
             </div>
             <div class="alarm-actions">
                 <button class="btn btn-success" onclick="handleAlarmAction('taken', ${notification.id})">
@@ -234,13 +271,27 @@ function showAlarmModal(notification) {
 }
 
 function closeAlarmModal() {
+    // Stop ringtone when closing modal
+    stopAlarmSound();
+    
     const modal = document.getElementById('alarm-modal');
     if (modal) {
         modal.remove();
     }
+    
+    // Clear session storage flags for shown alarms
+    const keys = Object.keys(sessionStorage);
+    keys.forEach(key => {
+        if (key.startsWith('alarm_shown_')) {
+            sessionStorage.removeItem(key);
+        }
+    });
 }
 
 async function handleAlarmAction(action, notificationId) {
+    // Stop the ringtone when any action is taken
+    stopAlarmSound();
+    
     if (action === 'taken') {
         // Extract medicine ID from notification
         const medicineId = await getMedicineIdFromNotification(notificationId);
@@ -365,16 +416,20 @@ async function handleMedicineSubmit(e) {
         return;
     }
     
-    // Handle specific times
+    // Handle specific times - convert 12-hour to 24-hour for storage
     let specific_times = null;
     if (specificTimesInput) {
-        specific_times = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
-        // Validate time format
-        for (let time of specific_times) {
-            if (!isValidTimeFormat(time)) {
-                showSnackbar(`Invalid time format: ${time}. Use HH:MM format (e.g., 08:00,14:00,20:00)`, 'error');
+        const timesArray = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
+        specific_times = [];
+        
+        // Validate and convert each time
+        for (let time of timesArray) {
+            if (!isValidTimeFormat12H(time)) {
+                showSnackbar(`Invalid time format: ${time}. Use HH:MM AM/PM format (e.g., 08:00 AM, 02:00 PM, 08:00 PM)`, 'error');
                 return;
             }
+            // Convert to 24-hour format for storage
+            specific_times.push(convertTo24Hour(time));
         }
     }
     
@@ -462,8 +517,46 @@ function validateMedicineForm() {
     return true;
 }
 
-function isValidTimeFormat(time) {
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+// Add these utility functions for time conversion
+function convertTo12Hour(time24) {
+    if (!time24) return '';
+    
+    try {
+        const [hours, minutes] = time24.split(':');
+        const hour = parseInt(hours);
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const hour12 = hour % 12 || 12;
+        return `${hour12}:${minutes} ${ampm}`;
+    } catch (error) {
+        console.error('Error converting time:', error);
+        return time24;
+    }
+}
+
+function convertTo24Hour(time12) {
+    if (!time12) return '';
+    
+    try {
+        const [timePart, ampm] = time12.split(' ');
+        let [hours, minutes] = timePart.split(':');
+        
+        hours = parseInt(hours);
+        if (ampm === 'PM' && hours < 12) {
+            hours += 12;
+        } else if (ampm === 'AM' && hours === 12) {
+            hours = 0;
+        }
+        
+        return `${hours.toString().padStart(2, '0')}:${minutes}`;
+    } catch (error) {
+        console.error('Error converting time:', error);
+        return time12;
+    }
+}
+
+// Update the medicine form validation for 12-hour format
+function isValidTimeFormat12H(time) {
+    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i;
     return timeRegex.test(time);
 }
 
@@ -678,9 +771,9 @@ async function loadUserMedicines() {
                 if (medicine.specific_times) {
                     try {
                         const times = JSON.parse(medicine.specific_times);
-                        specificTimesDisplay = times.join(', ');
+                        specificTimesDisplay = times.map(time => convertTo12Hour(time)).join(', ');
                     } catch (e) {
-                        specificTimesDisplay = medicine.specific_times;
+                        specificTimesDisplay = convertTo12Hour(medicine.specific_times);
                     }
                 }
                 
@@ -728,6 +821,9 @@ async function loadUserMedicines() {
                         </button>
                         <button class="btn btn-warning" onclick="logMedicineMissed(${medicine.id})">
                             <i class="fas fa-times"></i> Missed
+                        </button>
+                        <button class="btn btn-danger" onclick="removeMedicine(${medicine.id})">
+                            <i class="fas fa-trash"></i> Remove
                         </button>
                     </div>
                 </div>
@@ -943,6 +1039,92 @@ async function loadMedicineHistory() {
     }
 }
 
+// Add countdown display function
+function updateMedicineCountdowns() {
+    const medicineCards = document.querySelectorAll('.medicine-card');
+    
+    medicineCards.forEach(card => {
+        const timesElement = card.querySelector('.medicine-times');
+        if (timesElement) {
+            const timesText = timesElement.textContent.replace('Times: ', '');
+            const times = timesText.split(', ').map(time => time.trim());
+            
+            // Find next upcoming time
+            const now = new Date();
+            let nextTime = null;
+            let minDiff = Infinity;
+            
+            times.forEach(time12 => {
+                const time24 = convertTo24Hour(time12);
+                const [hours, minutes] = time24.split(':');
+                const targetTime = new Date();
+                targetTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                
+                // If time has passed today, set for tomorrow
+                if (targetTime < now) {
+                    targetTime.setDate(targetTime.getDate() + 1);
+                }
+                
+                const diff = targetTime - now;
+                if (diff < minDiff && diff > 0) {
+                    minDiff = diff;
+                    nextTime = targetTime;
+                }
+            });
+            
+            // Update or create countdown element
+            let countdownElement = card.querySelector('.medicine-countdown');
+            if (!countdownElement) {
+                countdownElement = document.createElement('div');
+                countdownElement.className = 'medicine-countdown';
+                card.querySelector('.medicine-footer').before(countdownElement);
+            }
+            
+            if (nextTime) {
+                const hours = Math.floor(minDiff / (1000 * 60 * 60));
+                const minutes = Math.floor((minDiff % (1000 * 60 * 60)) / (1000 * 60));
+                
+                if (hours > 0) {
+                    countdownElement.innerHTML = `<i class="fas fa-hourglass-half"></i> Next dose in ${hours}h ${minutes}m`;
+                } else {
+                    countdownElement.innerHTML = `<i class="fas fa-hourglass-end"></i> Next dose in ${minutes}m`;
+                }
+                
+                countdownElement.className = `medicine-countdown ${minutes < 30 ? 'countdown-urgent' : 'countdown-normal'}`;
+            } else {
+                countdownElement.innerHTML = `<i class="fas fa-check-circle"></i> All doses taken today`;
+                countdownElement.className = 'medicine-countdown countdown-complete';
+            }
+        }
+    });
+}
+
+// Remove medicine function
+async function removeMedicine(medicineId) {
+    if (!confirm('Are you sure you want to remove this medicine?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/remove_medicine/${medicineId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showSnackbar('Medicine removed successfully!');
+            await loadUserMedicines();
+            await loadStats();
+        } else {
+            showSnackbar(data.message || 'Failed to remove medicine', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to remove medicine:', error);
+        showSnackbar('Failed to remove medicine', 'error');
+    }
+}
+
 // Utility functions
 function showScreen(screenId) {
     console.log(`Switching to screen: ${screenId}`);
@@ -1068,360 +1250,9 @@ async function loadAdminStats() {
         console.error('Failed to load admin stats:', error);
     }
 }
-// Add these utility functions for time conversion
-function convertTo12Hour(time24) {
-    if (!time24) return '';
-    
-    try {
-        const [hours, minutes] = time24.split(':');
-        const hour = parseInt(hours);
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const hour12 = hour % 12 || 12;
-        return `${hour12}:${minutes} ${ampm}`;
-    } catch (error) {
-        console.error('Error converting time:', error);
-        return time24;
-    }
-}
-
-function convertTo24Hour(time12) {
-    if (!time12) return '';
-    
-    try {
-        const [timePart, ampm] = time12.split(' ');
-        let [hours, minutes] = timePart.split(':');
-        
-        hours = parseInt(hours);
-        if (ampm === 'PM' && hours < 12) {
-            hours += 12;
-        } else if (ampm === 'AM' && hours === 12) {
-            hours = 0;
-        }
-        
-        return `${hours.toString().padStart(2, '0')}:${minutes}`;
-    } catch (error) {
-        console.error('Error converting time:', error);
-        return time12;
-    }
-}
-
-// Update the medicine form validation for 12-hour format
-function isValidTimeFormat12H(time) {
-    const timeRegex = /^(0?[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$/i;
-    return timeRegex.test(time);
-}
-
-// Update the medicine form submission to handle 12-hour format
-async function handleMedicineSubmit(e) {
-    e.preventDefault();
-    
-    console.log('🔍 Medicine form submitted - Starting validation');
-    
-    if (!currentUser) {
-        showSnackbar('Please login first!', 'error');
-        return;
-    }
-    
-    // Get form values
-    const medicineName = document.getElementById('medicine-name').value;
-    const dosage = document.getElementById('dosage').value;
-    const frequency = document.getElementById('frequency').value;
-    const scheduleType = document.getElementById('schedule-type').value;
-    const timesPerDay = document.getElementById('times-per-day').value;
-    const specificTimesInput = document.getElementById('specific-times').value;
-    const startDate = document.getElementById('start-date').value;
-    const endDate = document.getElementById('end-date').value;
-    const instructions = document.getElementById('instructions').value;
-    const priority = document.getElementById('priority').value;
-    
-    console.log('📋 Form data:', { 
-        medicineName, dosage, frequency, scheduleType, 
-        timesPerDay, specificTimesInput, startDate, endDate, instructions, priority 
-    });
-    
-    // Validate form
-    if (!validateMedicineForm()) {
-        return;
-    }
-    
-    // Handle specific times - convert 12-hour to 24-hour for storage
-    let specific_times = null;
-    if (specificTimesInput) {
-        const timesArray = specificTimesInput.split(',').map(time => time.trim()).filter(time => time);
-        specific_times = [];
-        
-        // Validate and convert each time
-        for (let time of timesArray) {
-            if (!isValidTimeFormat12H(time)) {
-                showSnackbar(`Invalid time format: ${time}. Use HH:MM AM/PM format (e.g., 08:00 AM, 02:00 PM, 08:00 PM)`, 'error');
-                return;
-            }
-            // Convert to 24-hour format for storage
-            specific_times.push(convertTo24Hour(time));
-        }
-    }
-    
-    try {
-        // Show loading state
-        const submitBtn = document.getElementById('submit-medicine-btn');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
-        submitBtn.disabled = true;
-        
-        console.log('📤 Adding medicine to server...');
-        
-        const response = await fetch('/api/add_medicine', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                medicine_name: medicineName,
-                dosage: dosage,
-                frequency: frequency,
-                schedule_type: scheduleType,
-                times_per_day: parseInt(timesPerDay),
-                specific_times: specific_times,
-                start_date: startDate,
-                end_date: endDate || null,
-                instructions: instructions,
-                priority: priority
-            })
-        });
-        
-        const data = await response.json();
-        console.log('✅ Add medicine response:', data);
-        
-        if (data.success) {
-            showSnackbar('Medicine added successfully!');
-            // Reset form
-            document.getElementById('medicine-form').reset();
-            // Set current date for start date
-            document.getElementById('start-date').valueAsDate = new Date();
-            // Refresh stats and medicines
-            await loadStats();
-            await loadUserMedicines();
-            console.log('🔄 Stats and medicines refreshed');
-        } else {
-            console.error('❌ Medicine addition failed:', data.message);
-            showSnackbar(data.message || 'Failed to add medicine', 'error');
-        }
-    } catch (error) {
-        console.error('💥 Medicine addition error:', error);
-        showSnackbar('Failed to add medicine. Please try again.', 'error');
-    } finally {
-        // Reset button state
-        const submitBtn = document.getElementById('submit-medicine-btn');
-        if (submitBtn) {
-            submitBtn.innerHTML = '<i class="fas fa-plus"></i> Add Medicine';
-            submitBtn.disabled = false;
-        }
-    }
-}
-
-// Update the display functions to show 12-hour format
-async function loadUserMedicines() {
-    try {
-        const response = await fetch('/api/user_medicines');
-        const data = await response.json();
-        
-        const medicinesList = document.getElementById('medicines-list');
-        
-        if (data.success && data.medicines.length > 0) {
-            medicinesList.innerHTML = data.medicines.map(medicine => {
-                let specificTimesDisplay = '';
-                if (medicine.specific_times) {
-                    try {
-                        const times = JSON.parse(medicine.specific_times);
-                        specificTimesDisplay = times.map(time => convertTo12Hour(time)).join(', ');
-                    } catch (e) {
-                        specificTimesDisplay = convertTo12Hour(medicine.specific_times);
-                    }
-                }
-                
-                // In loadUserMedicines() function, update the medicine card HTML:
-return `
-<div class="medicine-card">
-    <div class="medicine-header">
-        <span class="medicine-name">${medicine.medicine_name}</span>
-        <span class="medicine-status status-${medicine.status.toLowerCase()}">
-            ${medicine.status}
-        </span>
-    </div>
-    <div class="medicine-dosage">
-        <i class="fas fa-pills"></i> ${medicine.dosage}
-    </div>
-    <div class="medicine-schedule">
-        <i class="fas fa-calendar"></i> ${medicine.frequency} • ${medicine.schedule_type}
-    </div>
-    ${specificTimesDisplay ? `
-        <div class="medicine-times">
-            <i class="fas fa-clock"></i> Times: ${specificTimesDisplay}
-        </div>
-    ` : ''}
-    ${medicine.instructions ? `
-        <div class="medicine-instructions">
-            <i class="fas fa-info-circle"></i> ${medicine.instructions}
-        </div>
-    ` : ''}
-    <div class="medicine-footer">
-        <span>Started: ${medicine.start_date}</span>
-        <span class="priority-${medicine.priority.toLowerCase()}">${medicine.priority}</span>
-    </div>
-    <div class="today-stats">
-        <div class="stat-taken">
-            <i class="fas fa-check-circle"></i>
-            Taken: ${medicine.today_taken}
-        </div>
-        <div class="stat-missed">
-            <i class="fas fa-times-circle"></i>
-            Missed: ${medicine.today_missed}
-        </div>
-    </div>
-    <div class="medicine-actions">
-        <button class="btn btn-success" onclick="logMedicineTaken(${medicine.id})">
-            <i class="fas fa-check"></i> Taken
-        </button>
-        <button class="btn btn-warning" onclick="logMedicineMissed(${medicine.id})">
-            <i class="fas fa-times"></i> Missed
-        </button>
-        <button class="btn btn-danger" onclick="removeMedicine(${medicine.id})">
-            <i class="fas fa-trash"></i> Remove
-        </button>
-    </div>
-</div>
-`;
-            }).join('');
-        } else {
-            medicinesList.innerHTML = `
-                <div style="text-align: center; padding: 40px 20px; color: #64748b;">
-                    <i class="fas fa-pills" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
-                    <p>No medicines added yet</p>
-                </div>
-            `;
-        }
-    } catch (error) {
-        console.error('Failed to load medicines:', error);
-        showSnackbar('Failed to load medicines', 'error');
-    }
-}
-
-// Add countdown display function
-function updateMedicineCountdowns() {
-    const medicineCards = document.querySelectorAll('.medicine-card');
-    
-    medicineCards.forEach(card => {
-        const timesElement = card.querySelector('.medicine-times');
-        if (timesElement) {
-            const timesText = timesElement.textContent.replace('Times: ', '');
-            const times = timesText.split(', ').map(time => time.trim());
-            
-            // Find next upcoming time
-            const now = new Date();
-            let nextTime = null;
-            let minDiff = Infinity;
-            
-            times.forEach(time12 => {
-                const time24 = convertTo24Hour(time12);
-                const [hours, minutes] = time24.split(':');
-                const targetTime = new Date();
-                targetTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-                
-                // If time has passed today, set for tomorrow
-                if (targetTime < now) {
-                    targetTime.setDate(targetTime.getDate() + 1);
-                }
-                
-                const diff = targetTime - now;
-                if (diff < minDiff && diff > 0) {
-                    minDiff = diff;
-                    nextTime = targetTime;
-                }
-            });
-            
-            // Update or create countdown element
-            let countdownElement = card.querySelector('.medicine-countdown');
-            if (!countdownElement) {
-                countdownElement = document.createElement('div');
-                countdownElement.className = 'medicine-countdown';
-                card.querySelector('.medicine-footer').before(countdownElement);
-            }
-            
-            if (nextTime) {
-                const hours = Math.floor(minDiff / (1000 * 60 * 60));
-                const minutes = Math.floor((minDiff % (1000 * 60 * 60)) / (1000 * 60));
-                
-                if (hours > 0) {
-                    countdownElement.innerHTML = `<i class="fas fa-hourglass-half"></i> Next dose in ${hours}h ${minutes}m`;
-                } else {
-                    countdownElement.innerHTML = `<i class="fas fa-hourglass-end"></i> Next dose in ${minutes}m`;
-                }
-                
-                countdownElement.className = `medicine-countdown ${minutes < 30 ? 'countdown-urgent' : 'countdown-normal'}`;
-            } else {
-                countdownElement.innerHTML = `<i class="fas fa-check-circle"></i> All doses taken today`;
-                countdownElement.className = 'medicine-countdown countdown-complete';
-            }
-        }
-    });
-}
-
-// Update the reminder checking to be more precise
-function startReminderChecking() {
-    // Check every minute for due reminders
-    reminderInterval = setInterval(async () => {
-        if (currentUser) {
-            await checkDueReminders();
-            updateMedicineCountdowns(); // Update countdowns every minute
-        }
-    }, 60000); // Check every minute
-    
-    // Also check immediately and update countdowns
-    if (currentUser) {
-        setTimeout(() => {
-            checkDueReminders();
-            updateMedicineCountdowns();
-        }, 2000);
-    }
-    
-    // Update countdowns every 30 seconds for better accuracy
-    setInterval(() => {
-        if (currentUser) {
-            updateMedicineCountdowns();
-        }
-    }, 30000);
-}
-
-// Remove medicine function
-async function removeMedicine(medicineId) {
-    if (!confirm('Are you sure you want to remove this medicine?')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/remove_medicine/${medicineId}`, {
-            method: 'DELETE'
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showSnackbar('Medicine removed successfully!');
-            await loadUserMedicines();
-            await loadStats();
-        } else {
-            showSnackbar(data.message || 'Failed to remove medicine', 'error');
-        }
-    } catch (error) {
-        console.error('Failed to remove medicine:', error);
-        showSnackbar('Failed to remove medicine', 'error');
-    }
-}
 
 // Function to show upcoming reminders in menu
 function showUpcomingRemindersMenu() {
     showScreen('upcoming-reminders-screen');
     loadUpcomingReminders();
 }
-
-
