@@ -751,3 +751,13 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
 
+
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'success': False, 'message': 'Resource not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'success': False, 'message': 'Internal server error'}), 500
+
+
