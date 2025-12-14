@@ -542,12 +542,13 @@ function validateMedicineForm() {
     return true;
 }
 
-// Add these utility functions for time conversion
-// Update the convertTo12Hour function in script.js
 function convertTo12Hour(time24) {
     if (!time24) return '';
     
     try {
+        // First clean the input
+        time24 = cleanTimeString(time24);
+        
         // Check if the time already has AM/PM (already in 12-hour format)
         if (time24.includes('AM') || time24.includes('PM')) {
             // It's already in 12-hour format, just return as-is
@@ -1302,6 +1303,7 @@ function cleanTimeString(timeString) {
     
     return cleaned;
 }
+
 
 
 
