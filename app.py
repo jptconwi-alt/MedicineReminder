@@ -503,10 +503,16 @@ def get_user_medicines():
         specific_times_display = []
         if medicine.specific_times:
             try:
+                # Parse the stored 24-hour times
                 times_24h = json.loads(medicine.specific_times)
+                # Convert each to 12-hour format
                 specific_times_display = [convert_to_12h(time) for time in times_24h]
             except:
-                specific_times_display = [medicine.specific_times]
+                # If it's not a JSON array, try to handle as single time
+                try:
+                    specific_times_display = [convert_to_12h(medicine.specific_times)]
+                except:
+                    specific_times_display = [medicine.specific_times]
         
         medicine_data = {
             'id': medicine.id,
@@ -515,7 +521,7 @@ def get_user_medicines():
             'frequency': medicine.frequency,
             'schedule_type': medicine.schedule_type,
             'times_per_day': medicine.times_per_day,
-            'specific_times': json.dumps(specific_times_display),  # Send as 12-hour format
+            'specific_times': json.dumps(specific_times_display),  # Already in 12-hour format
             'start_date': medicine.start_date,
             'end_date': medicine.end_date,
             'instructions': medicine.instructions,
@@ -774,6 +780,7 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return jsonify({'success': False, 'message': 'Internal server error'}), 500
+
 
 
 
