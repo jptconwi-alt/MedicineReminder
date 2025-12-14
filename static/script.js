@@ -1274,6 +1274,36 @@ function showUpcomingRemindersMenu() {
     loadUpcomingReminders();
 }
 
+// Add this utility function
+function getTimeFormat(timeString) {
+    if (timeString.includes('AM') || timeString.includes('PM')) {
+        return '12h';
+    } else if (/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeString)) {
+        return '24h';
+    }
+    return 'unknown';
+}   
+
+
+// Add this function to clean time strings
+function cleanTimeString(timeString) {
+    // Remove any extra AM/PM duplicates
+    let cleaned = timeString.trim();
+    
+    // Check for patterns like "4:19 PM AM" and remove the duplicate
+    if (cleaned.includes('AM') && cleaned.includes('PM')) {
+        // This shouldn't happen, but if it does, keep only the last one
+        if (cleaned.lastIndexOf('AM') > cleaned.lastIndexOf('PM')) {
+            cleaned = cleaned.replace(/PM/g, '').trim();
+        } else {
+            cleaned = cleaned.replace(/AM/g, '').trim();
+        }
+    }
+    
+    return cleaned;
+}
+
+
 
 
 
