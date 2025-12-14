@@ -87,12 +87,14 @@ class Notification(db.Model):
     is_read = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-# Initialize database
+# Replace the database initialization with retry logic
 with app.app_context():
-    max_retries = 3
+    max_retries = 5
+    retry_delay = 2  # seconds
+    
     for attempt in range(max_retries):
         try:
-            print(f"🔄 Medicine database initialization attempt {attempt + 1}/{max_retries}")
+            print(f"🔄 Database initialization attempt {attempt + 1}/{max_retries}")
             
             # Test database connection
             db.session.execute(text('SELECT 1'))
@@ -116,20 +118,20 @@ with app.app_context():
                 db.session.commit()
                 print("✅ Admin user created successfully!")
             else:
-                print(f"✅ Admin user already exists: {admin.username} (role: {admin.role})")
+                print(f"✅ Admin user exists: {admin.username}")
             
-            print("✅ Medicine database initialized successfully!")
+            print("✅ Database initialized successfully!")
             break
             
         except Exception as e:
-            print(f"❌ Database initialization attempt {attempt + 1} failed: {e}")
+            print(f"❌ Attempt {attempt + 1} failed: {str(e)[:100]}")
             db.session.rollback()
             
             if attempt == max_retries - 1:
                 print("💥 All database initialization attempts failed")
-                print("🔄 Starting application anyway...")
-            import time
-            time.sleep(2)
+                raise e
+            
+            time.sleep(retry_delay)
 
 # Utility functions
 def convert_to_12h(time_24h):
@@ -748,3 +750,4 @@ def set_reminder_time():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
+
